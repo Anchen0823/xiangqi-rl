@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xiangqi-nnue"
+version = "0.1.0"
+description = "Reproducible NNUE training tools for Xiangqi RL"
+requires-python = ">=3.12,<3.13"
+dependencies = ["numpy>=2.0,<3", "torch==2.12.1"]
+
+[project.scripts]
+xiangqi-hardware = "xiangqi_nnue.hardware:main"
+xiangqi-train = "xiangqi_nnue.train:main"
+xiangqi-smoke = "xiangqi_nnue.smoke:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

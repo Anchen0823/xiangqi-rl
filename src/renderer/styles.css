@@ -1,0 +1,75 @@
+:root { color: #eee5d8; background: #17120d; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 1000px; min-height: 700px; overflow: hidden; background: radial-gradient(circle at 50% -10%, #3a2b1d 0, #17120d 48%, #0d0a07 100%); }
+button, select, textarea { font: inherit; }
+button { color: inherit; cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+
+.app-shell { height: 100vh; display: flex; flex-direction: column; }
+.topbar { height: 76px; flex: 0 0 76px; display: flex; align-items: center; justify-content: space-between; padding: 0 34px; border-bottom: 1px solid #6c523b66; background: #120e0bd9; box-shadow: 0 8px 32px #0007; }
+.topbar > div { display: grid; grid-template-columns: 45px auto; grid-template-rows: 34px 18px; column-gap: 12px; align-items: center; }
+.seal { grid-row: 1 / 3; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid #d1a567; color: #e8c280; font: 700 25px 'Noto Serif SC'; transform: rotate(-2deg); }
+h1 { margin: 0; font: 700 25px 'Noto Serif SC'; letter-spacing: .18em; }
+.topbar p { margin: 0; font-size: 10px; letter-spacing: .28em; color: #aa9279; }
+.topbar nav { display: flex; gap: 8px; }
+.topbar button, .action-row button, details button { border: 1px solid #806244; border-radius: 4px; padding: 8px 15px; background: #2b2017; transition: .15s ease; }
+.topbar button:hover, .action-row button:hover, details button:hover { border-color: #d0a66d; background: #3a291c; }
+
+.workspace { min-height: 0; flex: 1; display: grid; grid-template-columns: 230px minmax(570px, 720px) 250px; justify-content: center; gap: 28px; padding: 24px 28px 30px; }
+.panel { align-self: stretch; min-height: 0; border: 1px solid #604a3566; border-radius: 8px; padding: 20px; background: linear-gradient(150deg, #251c15e8, #15100ce8); box-shadow: 0 16px 42px #0006, inset 0 1px #fff1; }
+.panel h2 { margin: 0 0 22px; padding-bottom: 13px; border-bottom: 1px solid #7b5e3f66; font: 600 18px 'Noto Serif SC'; letter-spacing: .12em; color: #dfc49e; }
+.panel h3 { margin: 22px 0 10px; font: 600 14px 'Noto Serif SC'; color: #c2a887; }
+.left-panel label:not(.switch) { display: grid; gap: 7px; margin: 0 0 15px; font-size: 12px; letter-spacing: .1em; color: #a9957f; }
+select, textarea { width: 100%; color: #eee1ce; border: 1px solid #604c39; border-radius: 4px; background: #100d0a; padding: 8px 9px; outline: none; }
+select:focus, textarea:focus { border-color: #b88a52; }
+.action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 22px 0 16px; }
+.switch { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #c2ae95; }
+.switch input { accent-color: #a94032; }
+.rule-counter { margin-top: 22px; padding: 13px; display: flex; align-items: center; justify-content: space-between; border-left: 2px solid #a94032; background: #100d0a99; }
+.rule-counter span { font-size: 12px; color: #a9957f; }
+.rule-counter strong { font-size: 18px; color: #dfc49e; }
+.rule-counter small { margin-left: 3px; font-size: 10px; font-weight: 400; color: #826f5d; }
+details { margin-top: 18px; font-size: 12px; color: #a9957f; }
+summary { cursor: pointer; padding: 6px 0; }
+details textarea { height: 86px; margin: 8px 0; resize: none; font: 10px Consolas, monospace; }
+details button { width: 100%; }
+
+.game-stage { min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+.status { margin-bottom: 11px; min-height: 25px; display: flex; align-items: center; gap: 9px; color: #d3c1a7; font: 500 14px 'Noto Serif SC'; letter-spacing: .08em; }
+.status > span { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 9px currentColor; }
+.status > span.red { color: #d95a48; background: currentColor; }
+.status > span.black { color: #d4be98; background: currentColor; }
+.status time { min-width: 66px; color: #9d896d; font: 600 12px Consolas, monospace; letter-spacing: 0; }
+.board-shell { --piece: clamp(42px, 5.1vh, 57px); position: relative; width: min(64vh, 630px); aspect-ratio: 8 / 9; margin: calc(var(--piece) / 2); filter: drop-shadow(0 22px 26px #0009); transition: opacity .15s; }
+.board-shell.disabled { opacity: .92; }
+.board-shell::before { content: ''; position: absolute; inset: calc(var(--piece) * -.55); border: 12px solid #55321c; border-radius: 5px; background: linear-gradient(105deg, #9e6335, #c88b4e 38%, #a66436 75%, #77421f); box-shadow: inset 0 0 0 2px #e4b77599, inset 0 0 28px #3c1d0c, 0 0 0 1px #1a0d06; z-index: -2; }
+.board-grid { position: absolute; inset: 0; border: 2px solid #4b2614; background-color: #bd7e43; background-image: linear-gradient(to right, transparent calc(12.5% - .75px), #542a16 calc(12.5% - .75px), #542a16 calc(12.5% + .75px), transparent calc(12.5% + .75px)), linear-gradient(to bottom, transparent calc(11.111% - .75px), #542a16 calc(11.111% - .75px), #542a16 calc(11.111% + .75px), transparent calc(11.111% + .75px)); background-size: 12.5% 100%, 100% 11.111%; box-shadow: inset 0 0 45px #70401f88; }
+.board-grid::before, .board-grid::after { content: ''; position: absolute; width: 25%; height: 22.222%; left: 37.5%; background: linear-gradient(33.7deg, transparent 49.5%, #542a16 49.7%, #542a16 50.3%, transparent 50.5%), linear-gradient(-33.7deg, transparent 49.5%, #542a16 49.7%, #542a16 50.3%, transparent 50.5%); }
+.board-grid::before { top: 0; } .board-grid::after { bottom: 0; }
+.river { position: absolute; z-index: 1; left: 0; right: 0; top: 44.444%; height: 11.111%; display: flex; align-items: center; justify-content: space-around; border-top: 1px solid #542a16; border-bottom: 1px solid #542a16; background: linear-gradient(#c5884d, #b9763e); color: #5a2c17; font: 600 clamp(18px, 2.2vh, 25px) 'Noto Serif SC'; letter-spacing: .45em; pointer-events: none; }
+.square-hit, .piece { position: absolute; width: var(--piece); height: var(--piece); transform: translate(-50%, -50%); border-radius: 50%; }
+.square-hit { z-index: 2; border: 0; background: transparent; }
+.square-hit.destination::after { content: ''; position: absolute; width: 13px; height: 13px; border-radius: 50%; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #7f1f18a8; box-shadow: 0 0 0 3px #f1d29f55; }
+.square-hit.last { background: #f4d28225; }
+.piece { z-index: 3; display: grid; place-items: center; padding: 0; border: 2px solid #3d1e0d; background: radial-gradient(circle at 35% 27%, #f3d59b, #c89250 56%, #75401e 100%); box-shadow: inset 0 0 0 3px #e6b975, inset 0 0 0 5px #633317, 0 4px 8px #2b140bb3; font: 700 calc(var(--piece) * .48) 'Noto Serif SC'; transition: transform .13s, filter .13s; }
+.piece:hover { transform: translate(-50%, -50%) scale(1.06); filter: brightness(1.08); }
+.piece.red { color: #a52e24; text-shadow: 0 1px #f7d89e; }
+.piece.black { color: #29231e; text-shadow: 0 1px #f7d89e; }
+.piece.selected { transform: translate(-50%, -50%) scale(1.1); box-shadow: inset 0 0 0 3px #f0c98e, inset 0 0 0 5px #8e231b, 0 0 18px #ffb25caa; }
+.loading { color: #a99172; }
+.error-banner { position: absolute; bottom: -16px; z-index: 8; max-width: 90%; padding: 9px 14px; border: 1px solid #a94336; border-radius: 4px; background: #441b17f2; color: #ffd9ce; font-size: 12px; }
+
+.evaluation, .pv { padding: 13px; background: #100d0a99; border: 1px solid #4f3e2e; border-radius: 4px; }
+.evaluation { display: flex; justify-content: space-between; align-items: center; }
+.evaluation span, .pv span { font-size: 11px; color: #8f7b66; letter-spacing: .08em; }
+.evaluation strong { color: #d5b078; font-size: 20px; }
+.pv { margin-top: 10px; display: grid; gap: 6px; }
+.pv strong { color: #e3c69d; font: 600 20px 'Noto Serif SC'; }
+.pv small { color: #786856; }
+.moves { margin: 0; padding: 0; list-style: none; max-height: calc(100vh - 430px); overflow: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; scrollbar-color: #6c5137 transparent; }
+.moves li { display: flex; gap: 7px; align-items: center; padding: 6px; background: #100d0a70; color: #d0bda2; font: 12px Consolas, monospace; }
+.moves li span { color: #725f4d; font-size: 9px; }
+.moves li b { margin-left: auto; color: #d44f3e; font: 600 10px 'Noto Serif SC'; }
+.empty { color: #756654; font-size: 12px; text-align: center; padding: 20px 0; }
+
+@media (max-height: 780px) { .workspace { padding-top: 12px; padding-bottom: 14px; } .topbar { height: 62px; flex-basis: 62px; } .board-shell { --piece: 40px; width: min(61vh, 560px); } }
