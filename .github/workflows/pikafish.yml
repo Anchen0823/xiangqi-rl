@@ -1,0 +1,36 @@
+name: Build pinned Pikafish
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - third_party/pikafish.rev
+      - .github/workflows/pikafish.yml
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: clang64
+          install: mingw-w64-clang-x86_64-clang make git
+      - name: Fetch exact GPL search source
+        run: |
+          revision=$(tr -d '\r\n' < third_party/pikafish.rev)
+          git clone --filter=blob:none https://github.com/official-pikafish/Pikafish.git native/vendor/Pikafish
+          git -C native/vendor/Pikafish fetch --depth 1 origin "$revision"
+          git -C native/vendor/Pikafish checkout --detach "$revision"
+      - name: Build AVX2 engine without a network
+        working-directory: native/vendor/Pikafish/src
+        run: make -j4 build ARCH=x86-64-avx2 COMP=clang EXE=pikafish.exe
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pikafish-windows-avx2-${{ github.sha }}
+          path: native/vendor/Pikafish/src/pikafish.exe
+          if-no-files-found: error
+          retention-days: 14
