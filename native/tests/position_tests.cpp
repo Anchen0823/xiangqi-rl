@@ -1,4 +1,5 @@
 #include "xiangqi/position.hpp"
+#include "xiangqi/search.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -74,6 +75,17 @@ void testIllegalSelfCheck() {
     expect(move && !position.play(*move, &error), "moving the only blocker is illegal");
 }
 
+void testUciInfoParsing() {
+    xiangqi::SearchResult result;
+    xiangqi::parseUciInfo("info depth 16 nodes 12345 nps 900000 score cp -37 pv h2e2 h7e7", result);
+    expect(result.depth == 16, "UCI depth is parsed");
+    expect(result.nodes == 12345 && result.nps == 900000, "UCI node metrics are parsed");
+    expect(result.scoreCp == -37 && !result.mate, "UCI centipawn score is parsed");
+    expect(result.pv.size() == 2 && result.pv.front() == "h2e2", "UCI principal variation is parsed");
+    xiangqi::parseUciInfo("info depth 20 score mate 3 pv e0e1", result);
+    expect(result.mate && *result.mate == 3, "UCI mate score is parsed");
+}
+
 } // namespace
 
 int main() {
@@ -83,6 +95,7 @@ int main() {
     testCannonScreen();
     testNaturalLimit();
     testIllegalSelfCheck();
+    testUciInfoParsing();
     if (failures) {
         std::cerr << failures << " test(s) failed\n";
         return EXIT_FAILURE;

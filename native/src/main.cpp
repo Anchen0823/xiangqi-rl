@@ -1,4 +1,5 @@
 #include "xiangqi/position.hpp"
+#include "xiangqi/search.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -120,6 +121,7 @@ std::string response(std::string_view id, bool ok, std::string_view payload,
 
 int main() {
     xiangqi::Position position;
+    xiangqi::PikafishClient search;
     std::string line;
     while (std::getline(std::cin, line)) {
         const std::string id = stringField(line, "id").value_or("");
@@ -149,14 +151,34 @@ int main() {
             if (!position.undo()) std::cout << response(id, false, "null", "Nothing to undo") << std::endl;
             else std::cout << response(id, true, snapshotJson(position)) << std::endl;
         } else if (method == "analyze") {
-            const auto best = position.fallbackBestMove();
+            const std::string difficulty = stringField(line, "difficulty").value_or("club");
+            const int depth = difficulty == "beginner" ? 4 : difficulty == "casual" ? 7
+                : difficulty == "advanced" ? 10 : difficulty == "expert" ? 18 : 14;
+            auto searched = search.analyze(position.fen(), depth);
+            const auto fallback = position.fallbackBestMove();
             std::ostringstream analysis;
-            analysis << "{\"depth\":1,\"nodes\":" << position.legalMoves().size()
-                     << ",\"nps\":0,\"scoreCp\":" << position.materialScore()
-                     << ",\"mate\":null,\"pv\":"
-                     << (best ? "[\"" + best->ucci() + "\"]" : "[]") << '}';
+            if (searched) {
+                const int sign = position.sideToMove() == xiangqi::Color::Red ? 1 : -1;
+                analysis << "{\"depth\":" << searched->depth << ",\"nodes\":" << searched->nodes
+                         << ",\"nps\":" << searched->nps << ",\"scoreCp\":" << searched->scoreCp * sign
+                         << ",\"mate\":" << (searched->mate ? std::to_string(*searched->mate * sign) : "null")
+                         << ",\"backend\":\"pikafish\",\"pv\":";
+                analysis << '[';
+                for (std::size_t i = 0; i < searched->pv.size(); ++i) {
+                    if (i) analysis << ',';
+                    analysis << '\"' << escapeJson(searched->pv[i]) << '\"';
+                }
+                analysis << "]}";
+            } else {
+                analysis << "{\"depth\":1,\"nodes\":" << position.legalMoves().size()
+                         << ",\"nps\":0,\"scoreCp\":" << position.materialScore()
+                         << ",\"mate\":null,\"backend\":\"fallback\",\"status\":\""
+                         << escapeJson(search.status()) << "\",\"pv\":"
+                         << (fallback ? "[\"" + fallback->ucci() + "\"]" : "[]") << '}';
+            }
             std::cout << response(id, true, analysis.str()) << std::endl;
         } else if (method == "stop") {
+            search.stop();
             std::cout << response(id, true, "{\"stopped\":true}") << std::endl;
         } else if (method == "quit") {
             std::cout << response(id, true, "{\"quitting\":true}") << std::endl;

@@ -26,6 +26,8 @@ export interface Analysis {
   scoreCp: number;
   mate: number | null;
   pv: string[];
+  backend?: 'pikafish' | 'fallback';
+  status?: string;
 }
 export interface EngineResponse<T = unknown> { id: string; ok: boolean; data?: T; error?: string }
 export interface SavedGameV1 {
