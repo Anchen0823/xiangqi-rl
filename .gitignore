@@ -77,6 +77,7 @@ web_modules/
 # Next.js build output
 .next
 out
+output/
 
 # Nuxt.js build / generate output
 .nuxt
@@ -141,3 +142,20 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Xiangqi RL native, desktop and training outputs
+.git-hold/
+dist-electron/
+build/
+coverage/
+.venv/
+__pycache__/
+*.py[cod]
+data/
+datasets/
+checkpoints/
+runs/
+models/*.pt
+models/*.ckpt
+models/*.nnue
+native/vendor/
