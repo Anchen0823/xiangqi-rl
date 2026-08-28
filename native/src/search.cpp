@@ -21,6 +21,19 @@ std::filesystem::path configuredPath(const char* variable, const std::filesystem
     return std::filesystem::current_path() / fallback;
 }
 
+std::filesystem::path defaultExecutable() {
+    if (const char* value = std::getenv("XIANGQI_PIKAFISH_PATH"); value && *value)
+        return value;
+    const auto pikafish = std::filesystem::current_path() / "native/bin/pikafish.exe";
+    const auto network = std::filesystem::current_path() / "models/champion.nnue";
+    const auto teacher = std::filesystem::current_path() / "native/bin/fairy-stockfish-teacher.exe";
+    // Prefer a real search backend when a local checkout has the pinned
+    // teacher but has not produced a champion network yet.
+    if (!std::filesystem::is_regular_file(network)
+        && std::filesystem::is_regular_file(teacher)) return teacher;
+    return pikafish;
+}
+
 std::string configuredValue(const char* variable, std::string fallback = {}) {
     if (const char* value = std::getenv(variable); value && *value) return value;
     return fallback;
@@ -52,11 +65,14 @@ void parseUciInfo(std::string_view line, SearchResult& result) {
 }
 
 struct PikafishClient::Impl {
-    std::filesystem::path executable = configuredPath("XIANGQI_PIKAFISH_PATH", "native/bin/pikafish.exe");
+    std::filesystem::path executable = defaultExecutable();
     std::filesystem::path network = configuredPath("XIANGQI_NNUE_PATH", "models/champion.nnue");
-    const bool embeddedNetwork = configuredValue("XIANGQI_EMBEDDED_NNUE") == "1";
+    const bool embeddedNetwork = configuredValue("XIANGQI_EMBEDDED_NNUE") == "1"
+        || executable.filename() == "fairy-stockfish-teacher.exe";
     const std::string variant = configuredValue("XIANGQI_UCI_VARIANT");
-    const std::string backend = configuredValue("XIANGQI_SEARCH_BACKEND", "pikafish");
+    const std::string backend = configuredValue(
+        "XIANGQI_SEARCH_BACKEND",
+        executable.filename() == "fairy-stockfish-teacher.exe" ? "cc0-teacher" : "pikafish");
     std::string message;
 #ifdef _WIN32
     HANDLE process = nullptr;
