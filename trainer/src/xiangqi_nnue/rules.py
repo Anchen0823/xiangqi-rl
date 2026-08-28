@@ -95,6 +95,9 @@ class NativeRulesClient:
             raise ValueError("move must be a single line")
         return self._request("playMove", move=move)
 
+    def undo(self) -> dict[str, Any]:
+        return self._request("undo")
+
     def close(self) -> None:
         if self._process.poll() is None:
             try:
