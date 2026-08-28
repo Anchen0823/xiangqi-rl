@@ -1,4 +1,5 @@
 import json
+import math
 import sys
 import tempfile
 import textwrap
@@ -11,10 +12,12 @@ from xiangqi_nnue.match import (
     EngineCrash,
     EngineTimeout,
     GameRecord,
+    NativeEnginePlayer,
     Opening,
     UciEngine,
     generate_openings,
     play_game,
+    sprt_llr,
     summarize_records,
     wilson_lower_bound,
     write_pgn,
@@ -116,6 +119,17 @@ class BestMoveParsingTests(unittest.TestCase):
         match = BESTMOVE_PATTERN.match("bestmove e2e4")
         self.assertIsNotNone(match)
         self.assertEqual(match.group(1), "e2e4")
+
+    def test_fairy_coordinate_flip_maps_ranks_down(self):
+        # Fairy-Stockfish ranks 1..10 from red's back rank; UCCI ranks 0..9.
+        with tempfile.TemporaryDirectory() as directory:
+            script = write_script(Path(directory), "fake_engine.py", FAKE_ENGINE_SCRIPT)
+            with UciEngine([sys.executable, "-u", str(script)], name="fake",
+                           coordinate_flip=True, timeout=10) as engine:
+                self.assertEqual(engine._to_ucci("b2b4"), "b1b3")
+                self.assertEqual(engine._to_ucci("e10e9"), "e9e8")
+                self.assertEqual(engine._to_ucci("a1a2"), "a0a1")
+                self.assertEqual(engine._to_ucci("h10g8"), "h9g7")
 
 
 class WilsonTests(unittest.TestCase):
@@ -237,6 +251,71 @@ class FakeMatchTests(unittest.TestCase):
         self.assertEqual(summary["draws"], 1)
         self.assertEqual(summary["losses"], 1)
         self.assertAlmostEqual(summary["score_rate"], 0.5)
+        # Balanced result at score 0.5 sits below the H1 hypothesis's bound.
+        self.assertLess(summary["sprt_llr"], math.log(0.95 / 0.05))
+
+    def test_sprt_llr_sign_and_bounds(self):
+        # Clear dominance under H1 (score > 0.6) pushes LLR positive past the
+        # H1 acceptance bound ln((1-beta)/alpha) for alpha=beta=0.05.
+        dominant = sprt_llr(560, 0, 240)
+        self.assertGreater(dominant, 0.0)
+        self.assertGreater(dominant, math.log(0.95 / 0.05))
+        # Clear deficit pushes LLR negative past the H0 acceptance bound.
+        self.assertLess(sprt_llr(240, 0, 560), math.log(0.05 / 0.95))
+        # All wins under h0=0.5 eventually pushes LLR past the H1 bound.
+        self.assertGreater(sprt_llr(100, 0, 0), math.log(0.95 / 0.05))
+        with self.assertRaises(ValueError):
+            sprt_llr(1, 0, 0, h0=0.7, h1=0.6)
+        with self.assertRaises(ValueError):
+            sprt_llr(-1, 0, 0)
+
+
+class NativeBaselinePlayerTests(unittest.TestCase):
+    def setUp(self):
+        self._directory = tempfile.TemporaryDirectory()
+        self.directory = Path(self._directory.name)
+
+    def tearDown(self):
+        self._directory.cleanup()
+
+    def make_fake_baseline(self):
+        script = write_script(
+            self.directory,
+            "fake_baseline.py",
+            textwrap.dedent(
+                """
+                import json, sys
+                for line in sys.stdin:
+                    request = json.loads(line)
+                    method = request["method"]
+                    if method == "quit":
+                        data = {"quitting": True}
+                    elif method == "loadFen":
+                        data = {"fen": request.get("fen", ""), "legalMoves": [],
+                                "result": {"kind": "ongoing", "reason": ""}}
+                    elif method == "analyze":
+                        data = {"depth": request.get("depth", 4), "nodes": 7, "nps": 0,
+                                "scoreCp": 12, "mate": None, "backend": "baseline",
+                                "pv": ["b2b4"]}
+                    else:
+                        data = {"fen": "9/9/9/9/9/9/9/9/9/9 w - - 0 1"}
+                    print(json.dumps({"id": request["id"], "ok": True, "data": data}),
+                          flush=True)
+                    if method == "quit":
+                        break
+                """
+            ),
+        )
+        return script
+
+    def test_baseline_search_returns_engine_move(self):
+        script = self.make_fake_baseline()
+        with NativeEnginePlayer([sys.executable, "-u", str(script)], name="baseline",
+                                difficulty="baseline", depth=4, timeout=10) as player:
+            result = player.search(INITIAL_FEN, 5000)
+            self.assertEqual(result.move, "b2b4")
+            self.assertEqual(result.depth, 4)
+            self.assertEqual(result.score_cp, 12)
 
 
 @unittest.skipUnless(HAVE_REAL_ENGINES, "requires native rules engine and pikafish binaries")

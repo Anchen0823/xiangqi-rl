@@ -1,3 +1,4 @@
+#include "xiangqi/baseline.hpp"
 #include "xiangqi/position.hpp"
 #include "xiangqi/search.hpp"
 
@@ -52,6 +53,27 @@ std::optional<std::string> stringField(std::string_view json, std::string_view f
         }
     }
     return std::nullopt;
+}
+
+std::optional<long long> numberField(std::string_view json, std::string_view field) {
+    const std::string needle = "\"" + std::string(field) + "\"";
+    std::size_t at = json.find(needle);
+    if (at == std::string_view::npos) return std::nullopt;
+    at = json.find(':', at + needle.size());
+    if (at == std::string_view::npos) return std::nullopt;
+    ++at;
+    while (at < json.size() && std::isspace(static_cast<unsigned char>(json[at]))) ++at;
+    std::size_t start = at;
+    while (at < json.size() && (std::isdigit(static_cast<unsigned char>(json[at]))
+                                || json[at] == '-' || json[at] == '.')) {
+        ++at;
+    }
+    if (at == start) return std::nullopt;
+    try {
+        return std::stoll(std::string(json.substr(start, at - start)));
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
 }
 
 std::string resultName(xiangqi::ResultKind result) {
@@ -152,6 +174,25 @@ int main() {
             else std::cout << response(id, true, snapshotJson(position)) << std::endl;
         } else if (method == "analyze") {
             const std::string difficulty = stringField(line, "difficulty").value_or("club");
+            if (difficulty == "baseline") {
+                const auto depthField = numberField(line, "depth");
+                const int depth = depthField ? static_cast<int>(*depthField) : 3;
+                auto baseline = baselineSearch(position, depth);
+                std::ostringstream analysis;
+                if (baseline) {
+                    const int sign = position.sideToMove() == xiangqi::Color::Red ? 1 : -1;
+                    analysis << "{\"depth\":" << baseline->depth << ",\"nodes\":"
+                             << baseline->nodes << ",\"nps\":0,\"scoreCp\":"
+                             << baseline->scoreCp * sign
+                             << ",\"mate\":null,\"backend\":\"baseline\",\"pv\":[\""
+                             << baseline->move.ucci() << "\"]}";
+                } else {
+                    analysis << "{\"depth\":0,\"nodes\":0,\"nps\":0,\"scoreCp\":0,"
+                             << "\"mate\":null,\"backend\":\"baseline\",\"pv\":[]}";
+                }
+                std::cout << response(id, true, analysis.str()) << std::endl;
+                continue;
+            }
             const int depth = difficulty == "beginner" ? 4 : difficulty == "casual" ? 7
                 : difficulty == "advanced" ? 10 : difficulty == "expert" ? 18 : 14;
             auto searched = search.analyze(position.fen(), depth);
