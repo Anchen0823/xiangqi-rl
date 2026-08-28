@@ -1,6 +1,8 @@
+#include "xiangqi/baseline.hpp"
 #include "xiangqi/position.hpp"
 #include "xiangqi/search.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -128,6 +130,31 @@ void testUciInfoParsing() {
     expect(result.mate && *result.mate == 3, "UCI mate score is parsed");
 }
 
+void testBaselineSearch() {
+    xiangqi::Position position;
+    const auto first = xiangqi::baselineSearch(position, 3);
+    const auto second = xiangqi::baselineSearch(position, 3);
+    expect(first.has_value() && second.has_value(), "baseline returns a move on the initial position");
+    if (first && second) {
+        expect(first->move == second->move, "baseline search is deterministic for a fixed depth");
+        const auto legal = position.legalMoves();
+        expect(std::find(legal.begin(), legal.end(), first->move) != legal.end(),
+               "baseline move is legal on the initial position");
+        expect(first->nodes > 0, "baseline counts nodes");
+    }
+
+    xiangqi::Position capture;
+    std::string error;
+    // Black has an undefended cannon on e5 that red's rook on e4 can take for free.
+    // FEN first rank is the top of the board (rank 9); red's back rank is last.
+    expect(capture.loadFen("3k5/9/9/9/4c4/4R4/9/9/9/4K4 w - - 0 1", &error),
+           "baseline capture FEN loads");
+    expect(!capture.legalMoves().empty(), "baseline capture position has legal moves");
+    const auto chosen = xiangqi::baselineSearch(capture, 3);
+    expect(chosen.has_value() && chosen->move == xiangqi::Move::fromUcci("e4e5"),
+           "baseline prefers capturing a free cannon at depth 3");
+}
+
 } // namespace
 
 int main() {
@@ -140,6 +167,7 @@ int main() {
     testKingAndPawnChaseExceptions();
     testRepetitionResponsibilityPriority();
     testUciInfoParsing();
+    testBaselineSearch();
     if (failures) {
         std::cerr << failures << " test(s) failed\n";
         return EXIT_FAILURE;

@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_library(xiangqi_rules src/position.cpp src/search.cpp)
+add_library(xiangqi_rules src/position.cpp src/search.cpp src/baseline.cpp)
 target_include_directories(xiangqi_rules PUBLIC include)
 if(MSVC)
   target_compile_options(xiangqi_rules PRIVATE /W4 /permissive- /EHsc)
