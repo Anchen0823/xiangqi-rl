@@ -157,8 +157,10 @@ data/
 datasets/
 checkpoints/
 runs/
+reports/
 models/*.pt
 models/*.ckpt
 models/*.nnue
 native/vendor/
 native/bin/
+.playwright-cli/
