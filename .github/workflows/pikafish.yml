@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - .gitattributes
       - third_party/pikafish.rev
       - third_party/pikafish-training.patch
       - .github/workflows/pikafish.yml
