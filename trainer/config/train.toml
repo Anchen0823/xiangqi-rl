@@ -12,11 +12,15 @@ batch_size = 8192
 micro_batch_size = 1024
 learning_rate = 0.001
 weight_decay = 0.00001
+warmup_steps = 500
 checkpoint_seconds = 1800
 memory_soft_limit_gib = 6.5
 system_memory_limit_gib = 12.0
 temperature_pause_c = 83
 temperature_resume_c = 78
+max_epochs = 10
+val_interval_epochs = 0.5
+early_stop_patience_epochs = 2.0
 
 [data]
 shard_glob = "data/shards/*.npz"
