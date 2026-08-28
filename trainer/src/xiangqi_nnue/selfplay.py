@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .rules import NativeRulesClient
-from .teacher import FairyStockfishTeacher, TeacherEvaluation, fairy_move_to_ucci
+from .teacher import FairyStockfishTeacher, TeacherEvaluation
 
 
 class RulesSource(Protocol):
@@ -73,7 +73,8 @@ def play_game(
             move = rng.choice(legal)
         else:
             evaluation = teacher.evaluate_fen(fen, nodes)
-            move = fairy_move_to_ucci(evaluation.bestmove)
+            # evaluate_fen already converts Fairy coordinates to UCCI.
+            move = evaluation.bestmove
             position.update({
                 "teacherScoreCp": evaluation.score_cp,
                 "teacherNodes": evaluation.nodes,
