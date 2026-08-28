@@ -14,6 +14,20 @@ from typing import Sequence
 MATE_SCORE = 32_000
 SCORE_PATTERN = re.compile(r"\bscore (cp|mate) (-?\d+)")
 NODES_PATTERN = re.compile(r"\bnodes (\d+)")
+FAIRY_MOVE = re.compile(r"^([a-i])(10|[1-9])([a-i])(10|[1-9])$")
+
+
+def fairy_move_to_ucci(move: str) -> str:
+    """Convert Fairy-Stockfish's files/1..10 ranks to UCCI files/0..9 ranks."""
+    match = FAIRY_MOVE.fullmatch(move)
+    if match is None:
+        raise ValueError(f"invalid Fairy-Stockfish Xiangqi move {move}")
+    return (
+        match.group(1)
+        + str(int(match.group(2)) - 1)
+        + match.group(3)
+        + str(int(match.group(4)) - 1)
+    )
 
 
 class TeacherProtocolError(RuntimeError):
@@ -128,7 +142,7 @@ class FairyStockfishTeacher:
                 if line.startswith("bestmove "):
                     if latest is None:
                         raise TeacherProtocolError("teacher returned bestmove without a score")
-                    bestmove = line.split(maxsplit=2)[1]
+                    bestmove = fairy_move_to_ucci(line.split(maxsplit=2)[1])
                     return TeacherEvaluation(latest[0], bestmove, latest[2], latest[1])
 
     def close(self) -> None:
