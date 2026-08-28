@@ -7,7 +7,7 @@ name = "xiangqi-nnue"
 version = "0.1.0"
 description = "Reproducible NNUE training tools for Xiangqi RL"
 requires-python = ">=3.12,<3.13"
-dependencies = ["numpy>=2.0,<3", "torch==2.12.1"]
+dependencies = ["numpy>=2.0,<3", "torch==2.12.1", "zstandard>=0.22,<1"]
 
 [project.scripts]
 xiangqi-hardware = "xiangqi_nnue.hardware:main"
@@ -17,6 +17,9 @@ xiangqi-selfplay = "xiangqi_nnue.selfplay:main"
 xiangqi-train = "xiangqi_nnue.train:main"
 xiangqi-smoke = "xiangqi_nnue.smoke:main"
 xiangqi-teacher = "xiangqi_nnue.teacher:main"
+xiangqi-export-nnue = "xiangqi_nnue.export_nnue:main"
+xiangqi-parity = "xiangqi_nnue.parity:main"
+xiangqi-match = "xiangqi_nnue.match:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

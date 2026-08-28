@@ -82,6 +82,11 @@ class NativeRulesClient:
     def new_game(self) -> dict[str, Any]:
         return self._request("newGame")
 
+    def load_fen(self, fen: str) -> dict[str, Any]:
+        if "\n" in fen or "\r" in fen:
+            raise ValueError("fen must be a single line")
+        return self._request("loadFen", fen=fen)
+
     def snapshot(self) -> dict[str, Any]:
         return self._request("snapshot")
 
