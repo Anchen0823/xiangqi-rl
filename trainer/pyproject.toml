@@ -22,6 +22,7 @@ xiangqi-parity = "xiangqi_nnue.parity:main"
 xiangqi-match = "xiangqi_nnue.match:main"
 xiangqi-inspect = "xiangqi_nnue.inspect:main"
 xiangqi-diff = "xiangqi_nnue.diff:main"
+xiangqi-split = "xiangqi_nnue.split:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
