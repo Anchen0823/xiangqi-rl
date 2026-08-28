@@ -6,13 +6,12 @@ import hashlib
 import json
 import os
 import random
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
 from .rules import NativeRulesClient
-from .teacher import FairyStockfishTeacher, TeacherEvaluation
+from .teacher import FairyStockfishTeacher, TeacherEvaluation, fairy_move_to_ucci
 
 
 class RulesSource(Protocol):
@@ -37,22 +36,6 @@ class GeneratedGame:
     positions: tuple[dict[str, Any], ...]
     result: str
     reason: str
-
-
-FAIRY_MOVE = re.compile(r"^([a-i])(10|[1-9])([a-i])(10|[1-9])$")
-
-
-def fairy_move_to_ucci(move: str) -> str:
-    """Convert Fairy-Stockfish's files/1..10 ranks to UCCI files/0..9 ranks."""
-    match = FAIRY_MOVE.fullmatch(move)
-    if match is None:
-        raise ValueError(f"invalid Fairy-Stockfish Xiangqi move {move}")
-    return (
-        match.group(1)
-        + str(int(match.group(2)) - 1)
-        + match.group(3)
-        + str(int(match.group(4)) - 1)
-    )
 
 
 def _outcome(result: str, fen: str) -> float:
