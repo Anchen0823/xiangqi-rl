@@ -75,6 +75,48 @@ void testIllegalSelfCheck() {
     expect(move && !position.play(*move, &error), "moving the only blocker is illegal");
 }
 
+void testKingAndPawnChaseExceptions() {
+    xiangqi::Position position;
+    std::string error;
+    expect(position.loadFen("4k4/9/n8/9/P3P4/9/9/9/9/4K4 w - - 0 30", &error),
+           "direct pawn chase FEN loads");
+    expect(position.play(*xiangqi::Move::fromUcci("a5b5"), &error),
+           "crossed pawn can move sideways");
+    expect(position.history().back().chasedIds.empty(), "pawn's direct chase is allowed");
+
+    expect(position.loadFen("4k4/9/1n7/9/1P2P4/9/9/9/9/1R2K4 w - - 0 30", &error),
+           "discovered chase FEN loads");
+    expect(position.play(*xiangqi::Move::fromUcci("b5a5"), &error),
+           "crossed pawn uncovers rook line");
+    expect(!position.history().back().chasedIds.empty(),
+           "pawn move causing another piece's new chase is classified as chase");
+}
+
+void testRepetitionResponsibilityPriority() {
+    using xiangqi::RepetitionResponsibility;
+    using xiangqi::ResultKind;
+    const auto singleCheck = xiangqi::adjudicateRepetitionCycle(
+        RepetitionResponsibility{true, false}, RepetitionResponsibility{}, false);
+    expect(singleCheck.kind == ResultKind::BlackWin && singleCheck.reason == "perpetual_check",
+           "a sole perpetual checker loses");
+
+    const auto mutualCheck = xiangqi::adjudicateRepetitionCycle(
+        RepetitionResponsibility{true, false}, RepetitionResponsibility{true, false}, false);
+    expect(mutualCheck.kind == ResultKind::Draw,
+           "mutual perpetual check is not assigned by color iteration order");
+
+    const auto soleChase = xiangqi::adjudicateRepetitionCycle(
+        RepetitionResponsibility{false, true}, RepetitionResponsibility{}, false);
+    expect(soleChase.kind == ResultKind::BlackWin && soleChase.reason == "perpetual_chase",
+           "a sole prohibited chaser loses");
+
+    const auto earlyMutual = xiangqi::adjudicateRepetitionCycle(
+        RepetitionResponsibility{true, false}, RepetitionResponsibility{true, false}, true);
+    expect(earlyMutual.kind == ResultKind::BlackWin
+               && earlyMutual.reason == "early_repetition_red_must_deviate",
+           "an otherwise drawn early repetition requires red to deviate");
+}
+
 void testUciInfoParsing() {
     xiangqi::SearchResult result;
     xiangqi::parseUciInfo("info depth 16 nodes 12345 nps 900000 score cp -37 pv h2e2 h7e7", result);
@@ -95,6 +137,8 @@ int main() {
     testCannonScreen();
     testNaturalLimit();
     testIllegalSelfCheck();
+    testKingAndPawnChaseExceptions();
+    testRepetitionResponsibilityPriority();
     testUciInfoParsing();
     if (failures) {
         std::cerr << failures << " test(s) failed\n";

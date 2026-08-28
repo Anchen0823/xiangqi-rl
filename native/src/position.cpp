@@ -23,6 +23,26 @@ std::string boardKey(const std::array<char, 90>& board, Color side) {
 
 } // namespace
 
+Result adjudicateRepetitionCycle(RepetitionResponsibility red,
+                                 RepetitionResponsibility black,
+                                 bool earlyDrawRequiresRedDeviation) {
+    if (red.longCheck != black.longCheck) {
+        return {red.longCheck ? ResultKind::BlackWin : ResultKind::RedWin, "perpetual_check"};
+    }
+
+    const bool redForbidden = red.longCheck || red.longChase;
+    const bool blackForbidden = black.longCheck || black.longChase;
+    if (redForbidden != blackForbidden) {
+        return {redForbidden ? ResultKind::BlackWin : ResultKind::RedWin,
+                red.longChase || black.longChase ? "perpetual_chase" : "prohibited_repetition"};
+    }
+
+    if (earlyDrawRequiresRedDeviation) {
+        return {ResultKind::BlackWin, "early_repetition_red_must_deviate"};
+    }
+    return {ResultKind::Draw, "mutual_repetition"};
+}
+
 std::string Move::ucci() const {
     if (!valid()) return {};
     std::string result(4, '0');
@@ -333,21 +353,47 @@ int Position::pieceValue(char piece) {
     }
 }
 
-std::set<std::uint8_t> Position::chasedByMove(Move move, Color mover) const {
+std::set<std::uint8_t> Position::chasedByMove(Move move, Color mover, char captured,
+                                              bool answeredCheck) const {
     std::set<std::uint8_t> chased;
     const char moved = board_[move.to];
     const char type = static_cast<char>(std::tolower(static_cast<unsigned char>(moved)));
-    if (type == 'k' || type == 'p') return chased;
-    for (int target = 0; target < 90; ++target) {
+
+    // A king response is quiet even when moving it uncovers a new attack (26.1.2).
+    if (type == 'k' && answeredCheck) return chased;
+
+    Position before;
+    before.board_ = board_;
+    before.ids_ = ids_;
+    before.board_[move.from] = moved;
+    before.board_[move.to] = captured;
+
+    const auto addIfProfitable = [&](int attacker, int target) {
         const char victim = board_[target];
-        if (!isColor(victim, opposite(mover)) || !attacksSquare(move.to, target)) continue;
+        if (!isColor(victim, opposite(mover)) || !attacksSquare(attacker, target)) return;
         if (std::tolower(static_cast<unsigned char>(victim)) == 'p') {
             const int rank = rankOf(target);
-            if ((isRed(victim) && rank <= 4) || (isBlack(victim) && rank >= 5)) continue;
+            if ((isRed(victim) && rank <= 4) || (isBlack(victim) && rank >= 5)) return;
         }
         const bool protectedVictim = defended(target, opposite(mover));
-        if (protectedVictim && pieceValue(moved) >= pieceValue(victim)) continue;
+        if (protectedVictim && pieceValue(board_[attacker]) >= pieceValue(victim)) return;
         chased.insert(ids_[target]);
+    };
+
+    // Direct king and pawn attacks are allowed to repeat (26.1).
+    if (type != 'k' && type != 'p') {
+        for (int target = 0; target < 90; ++target) addIfProfitable(move.to, target);
+    }
+
+    // Moving a king or pawn can still uncover a new chase by another piece (26.1.1).
+    for (int attacker = 0; attacker < 90; ++attacker) {
+        if (attacker == move.to || !isColor(board_[attacker], mover)) continue;
+        for (int target = 0; target < 90; ++target) {
+            if (!isColor(board_[target], opposite(mover))) continue;
+            if (attacksSquare(attacker, target) && !before.attacksSquare(attacker, target)) {
+                addIfProfitable(attacker, target);
+            }
+        }
     }
     return chased;
 }
@@ -382,6 +428,7 @@ bool Position::play(Move move, std::string* error) {
     }
     undo_.push_back(snapshot());
     const Color mover = side_;
+    const bool answeredCheck = inCheck(mover);
     const char moved = board_[move.from];
     const char captured = board_[move.to];
     const std::uint8_t movedId = ids_[move.from];
@@ -398,7 +445,8 @@ bool Position::play(Move move, std::string* error) {
     }
     const bool gaveCheck = inCheck(side_);
     if (gaveCheck) ++checksSinceCapture_[colorIndex(mover)];
-    const auto chased = gaveCheck ? std::set<std::uint8_t>{} : chasedByMove(move, mover);
+    const auto chased = gaveCheck ? std::set<std::uint8_t>{}
+                                  : chasedByMove(move, mover, captured, answeredCheck);
     records_.push_back({move, mover, moved, captured, gaveCheck, chased});
     if (mover == Color::Black) ++fullmoveNumber_;
 
@@ -462,23 +510,12 @@ void Position::adjudicateRepetition() {
         }
     }
 
-    for (Color color : {Color::Red, Color::Black}) {
-        const int index = colorIndex(color);
-        if (hasMove[index] && allCheck[index]) {
-            result_ = {color == Color::Red ? ResultKind::BlackWin : ResultKind::RedWin,
-                       "perpetual_check"};
-            return;
-        }
-    }
+    const bool redCheck = hasMove[0] && allCheck[0];
+    const bool blackCheck = hasMove[1] && allCheck[1];
     const bool redChase = chaseInitialized[0] && !chaseIntersection[0].empty();
     const bool blackChase = chaseInitialized[1] && !chaseIntersection[1].empty();
-    if (redChase != blackChase) {
-        result_ = {redChase ? ResultKind::BlackWin : ResultKind::RedWin, "perpetual_chase"};
-    } else if (fullmoveNumber_ <= 25) {
-        result_ = {ResultKind::BlackWin, "early_repetition_red_must_deviate"};
-    } else {
-        result_ = {ResultKind::Draw, "mutual_repetition"};
-    }
+    result_ = adjudicateRepetitionCycle({redCheck, redChase}, {blackCheck, blackChase},
+                                        fullmoveNumber_ <= 25);
 }
 
 void Position::updateTerminalByMoves() {
