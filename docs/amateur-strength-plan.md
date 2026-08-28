@@ -171,3 +171,39 @@ M1/M2 都未通过前，只能把候选称为“实验权重”，不得在 UI �
 - Gate 1、Gate 2、战术套件报告齐全且全部通过；若有人类验证，含 20 局原始记录。
 - 训练报告记录数据许可、manifest、曲线、超参、硬件与复现命令。
 - 所有失败候选与试验日志保留，不覆盖冠军记录。
+
+## 8. 实施进度（2026-08-29 更新）
+
+首批代码任务 1–6 全部完成并经 PR 合并（#18–#25）：
+
+| 任务 | 状态 | 合并 PR |
+|---|---|---|
+| 1. `.nnue` 导出 + 回读闭环 | 完成 | #18 |
+| 2. `match.py` 确定性比赛设施 | 完成 | #19 |
+| 3. native depth-limited baseline 搜索 | 完成 | #21 |
+| 4. `train.toml` 接入 + train/val 指标与早停 | 完成 | #20 |
+| 5. `verify-artifacts.ps1` + `run-gates.ps1` | 完成 | #21 |
+| 6. `inspect-dataset.ps1` 数据质量统计 | 完成 | #22 |
+| 附：教师坐标修复（Fairy→UCCI，self-play 双重转换） | 完成 | #22/#24 |
+| 附：perft 规则差分 harness（阶段 1.1） | 完成 | #25 |
+| 附：按对局边界切分 + FEN 去重（阶段 3） | 完成 | #27 |
+| 附：baseline 强度标定 smoke（50/200/1000 nodes） | 完成 | #26 |
+
+关键验证（本机，2026-08-29）：
+
+- 规则差分：depth 1 随机 200 局面、depth 2 随机 60 局面，native 与 Pikafish
+  perft 计数 100% 一致。
+- 数据试跑：400 局 self-play（58,826 位置）→ 5,000 nodes 标注 → 质量门
+  bestmove 合法性 100/100、重复 FEN 1.36% → 90/5/5 按对局切分（train
+  52,262 / val 2,802 / test 3,008）。
+- S1 训练 smoke（2 epoch，config 驱动）：train Huber 0.089→0.031（Pearson
+  0.90），val Huber 0.124→0.109（Pearson 0.67），早停与 LR schedule 验证。
+- baseline depth-3 标定（8 局/档）：vs 50/200/1000 nodes 教师得分率
+  0.25/0.50/0.50，处于预期强度带（CI 宽，待扩样）。
+
+进行中：
+
+- 阶段 3 规模化 self-play（`datasets/selfplay-v1`，12 workers、5000 nodes、
+  断点可恢复，后台运行中）。
+- 待办：3–8M 标注、全量 S1 训练并导出 `.nnue`、Gate 1/2 与战术套件、
+  人类验证。全部按本计划 §3 各阶段退出标准推进。
