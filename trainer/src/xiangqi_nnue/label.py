@@ -130,6 +130,9 @@ def label_records(
             evaluation = teacher.evaluate_fen(position.fen, nodes)
         else:
             assert position.teacher_nodes is not None and position.teacher_bestmove is not None
+            # Self-play caches bestmoves in UCCI (it converts them), so the
+            # cached value is passed through as-is; the live path above gets
+            # UCCI from evaluate_fen directly.
             evaluation = TeacherEvaluation(
                 position.teacher_score_cp,
                 position.teacher_bestmove,
