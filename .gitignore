@@ -149,6 +149,7 @@ dist-electron/
 build/
 coverage/
 .venv/
+.cuda/
 __pycache__/
 *.py[cod]
 data/
