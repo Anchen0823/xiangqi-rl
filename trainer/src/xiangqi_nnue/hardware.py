@@ -36,3 +36,7 @@ def collect() -> dict[str, object]:
 
 def main() -> None:
     print(json.dumps(collect(), ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
