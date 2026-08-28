@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -163,7 +164,10 @@ def main() -> None:
     parser.add_argument("--max-plies", type=int, default=240)
     parser.add_argument("--random-plies", type=int, default=4)
     parser.add_argument("--seed", type=int, default=823)
+    parser.add_argument("--workers", type=int, default=1)
     args = parser.parse_args()
+    if args.workers <= 0 or args.workers > 12:
+        parser.error("workers must be in [1, 12]")
     teacher_manifest = json.loads(args.teacher_manifest.read_text(encoding="utf-8"))
     teacher_hash = sha256(args.teacher_engine)
     if teacher_manifest.get("networkLicense") != "CC0-1.0":
@@ -183,10 +187,12 @@ def main() -> None:
     completed = len(writer.manifest["games"])
     if args.games < completed:
         raise ValueError("requested game count is below the completed manifest count")
-    with NativeRulesClient(args.rules_engine) as rules:
-        with FairyStockfishTeacher(args.teacher_engine) as teacher:
-            for game_index in range(completed, args.games):
-                game = play_game(
+    game_indices = range(completed, args.games)
+
+    def generate(game_index: int) -> GeneratedGame:
+        with NativeRulesClient(args.rules_engine) as rules:
+            with FairyStockfishTeacher(args.teacher_engine) as teacher:
+                return play_game(
                     rules,
                     teacher,
                     random.Random(args.seed + game_index * 1_000_003),
@@ -194,13 +200,36 @@ def main() -> None:
                     max_plies=args.max_plies,
                     random_plies=args.random_plies,
                 )
-                writer.add(game)
-                print(json.dumps({
-                    "game": game_index,
-                    "records": len(game.positions),
-                    "result": game.result,
-                    "reason": game.reason,
-                }), flush=True)
+
+    def record(game_index: int, game: GeneratedGame) -> None:
+        writer.add(game)
+        print(json.dumps({
+            "game": game_index,
+            "records": len(game.positions),
+            "result": game.result,
+            "reason": game.reason,
+            "workers": args.workers,
+        }), flush=True)
+
+    if args.workers == 1:
+        # Keep both engines alive across games on the default path.
+        with NativeRulesClient(args.rules_engine) as rules:
+            with FairyStockfishTeacher(args.teacher_engine) as teacher:
+                for game_index in game_indices:
+                    record(game_index, play_game(
+                        rules,
+                        teacher,
+                        random.Random(args.seed + game_index * 1_000_003),
+                        nodes=args.nodes,
+                        max_plies=args.max_plies,
+                        random_plies=args.random_plies,
+                    ))
+    else:
+        # executor.map preserves game-index order, so the central writer remains
+        # atomic and deterministic even though engines search concurrently.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+            for game_index, game in zip(game_indices, executor.map(generate, game_indices)):
+                record(game_index, game)
 
 
 if __name__ == "__main__":
