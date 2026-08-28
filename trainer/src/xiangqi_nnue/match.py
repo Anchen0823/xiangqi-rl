@@ -211,6 +211,58 @@ class Opening:
     moves: tuple[str, ...]
 
 
+class NativeEnginePlayer:
+    """JSON-protocol player for the native rules engine's ``analyze`` method.
+
+    Lets the depth-limited baseline (or the greedy fallback) take part in
+    matches through the same interface as :class:`UciEngine`: ``name``,
+    ``new_game``, ``search`` and ``close``. ``search`` ignores the node budget
+    (the baseline is depth-limited) and returns a single-move PV.
+    """
+
+    def __init__(
+        self,
+        executable: str | Path,
+        *,
+        name: str | None = None,
+        difficulty: str = "baseline",
+        depth: int = 3,
+        timeout: float = 30.0,
+    ) -> None:
+        self.name = name or Path(executable).stem
+        self.difficulty = difficulty
+        self.depth = max(1, int(depth))
+        self._rules = NativeRulesClient(executable, timeout=timeout)
+
+    def new_game(self) -> None:
+        self._rules.new_game()
+
+    def search(self, fen: str, nodes: int) -> SearchResult:
+        if "\n" in fen or "\r" in fen or not fen.strip():
+            raise ValueError("FEN must be a non-empty single line")
+        self._rules.load_fen(fen)
+        data = self._rules._request(
+            "analyze", difficulty=self.difficulty, depth=self.depth
+        )
+        pv = data.get("pv") or []
+        result = SearchResult(
+            move=pv[0] if pv else "",
+            depth=int(data.get("depth", 0)),
+            nodes=int(data.get("nodes", 0)),
+            score_cp=int(data.get("scoreCp", 0)),
+        )
+        return result
+
+    def close(self) -> None:
+        self._rules.close()
+
+    def __enter__(self) -> NativeEnginePlayer:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
 def generate_openings(
     rules: NativeRulesClient,
     *,
@@ -276,7 +328,7 @@ class GameRecord:
 
 def play_game(
     rules: NativeRulesClient,
-    engines: dict[str, UciEngine],
+    engines: dict[str, UciEngine | NativeEnginePlayer],
     opening: Opening,
     *,
     nodes: int,
@@ -408,7 +460,7 @@ def write_ucci_log(record: GameRecord, path: Path) -> None:
 def run_match(
     *,
     rules_command: str | Path,
-    engines: dict[str, UciEngine],
+    engines: dict[str, UciEngine | NativeEnginePlayer],
     seed: int,
     games: int,
     opening_plies: int,
@@ -461,7 +513,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Play deterministic UCI-engine Xiangqi matches with a rules referee"
     )
-    parser.add_argument("--engine", action="append", required=True, help="UCI engine path (repeat for red/black)")
+    parser.add_argument("--engine", action="append", help="UCI engine path (repeat for red/black)")
+    parser.add_argument("--baseline", action="append", help="native engine used as baseline player (repeat for red/black)")
+    parser.add_argument("--baseline-depth", type=int, default=3, help="depth for --baseline players")
     parser.add_argument("--eval-file", action="append", default=[], help="NNUE eval file per engine")
     parser.add_argument("--engine-name", action="append", default=[], help="engine display name")
     parser.add_argument("--rules-engine", required=True, help="native rules referee path")
@@ -477,26 +531,52 @@ def main() -> None:
     parser.add_argument("--out-dir", required=True)
     args = parser.parse_args()
 
-    if len(args.engine) not in (1, 2):
-        parser.error("provide exactly one engine (self-play) or two engines (match)")
-    paths = [Path(value) for value in args.engine]
-    if len(paths) == 1:
-        paths = [paths[0], paths[0]]
+    uci_paths = [Path(value) for value in args.engine or []]
+    baseline_paths = [Path(value) for value in args.baseline or []]
+    # A single entry duplicates to both sides (self-play / baseline mirror).
+    if len(uci_paths) == 1 and not baseline_paths:
+        uci_paths = [uci_paths[0], uci_paths[0]]
+    if len(baseline_paths) == 1 and not uci_paths:
+        baseline_paths = [baseline_paths[0], baseline_paths[0]]
+    if len(uci_paths) + len(baseline_paths) != 2:
+        parser.error("provide two players total: --engine and/or --baseline, each 1 or 2 entries")
+
     eval_files = list(args.eval_file) or [None, None]
     if len(eval_files) == 1:
         eval_files = [eval_files[0], eval_files[0]]
     if len(eval_files) != 2:
         parser.error("provide zero, one, or two --eval-file values")
-    names = list(args.engine_name) or [paths[0].stem, paths[1].stem]
+    names = list(args.engine_name) or []
     if len(names) == 1:
         names = [names[0], names[0]]
 
-    engines = {
-        "red": UciEngine(paths[0], name=names[0], eval_file=eval_files[0],
-                         threads=args.threads, hash_mb=args.hash_mb, timeout=args.timeout),
-        "black": UciEngine(paths[1], name=names[1], eval_file=eval_files[1],
-                           threads=args.threads, hash_mb=args.hash_mb, timeout=args.timeout),
-    }
+    # Red is the first player listed, black the second. One UCI engine paired
+    # with one baseline is the canonical candidate-vs-baseline setup.
+    specs: list[tuple[str, Path]] = []
+    for index in range(2):
+        if index < len(uci_paths):
+            specs.append(("uci", uci_paths[index]))
+        else:
+            specs.append(("baseline", baseline_paths[0]))
+    if len(uci_paths) == 2:
+        specs = [("uci", uci_paths[0]), ("uci", uci_paths[1])]
+    if len(baseline_paths) == 2:
+        specs = [("baseline", baseline_paths[0]), ("baseline", baseline_paths[1])]
+
+    engines: dict[str, UciEngine | NativeEnginePlayer] = {}
+    for index, (kind, path) in enumerate(specs):
+        display = names[index] if index < len(names) and names[index] else path.stem
+        side = ("red", "black")[index]
+        if kind == "baseline":
+            engines[side] = NativeEnginePlayer(
+                path, name=display, difficulty="baseline",
+                depth=args.baseline_depth, timeout=args.timeout,
+            )
+        else:
+            engines[side] = UciEngine(
+                path, name=display, eval_file=eval_files[index],
+                threads=args.threads, hash_mb=args.hash_mb, timeout=args.timeout,
+            )
     try:
         summary = run_match(
             rules_command=args.rules_engine,

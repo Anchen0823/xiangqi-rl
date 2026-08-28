@@ -11,6 +11,7 @@ from xiangqi_nnue.match import (
     EngineCrash,
     EngineTimeout,
     GameRecord,
+    NativeEnginePlayer,
     Opening,
     UciEngine,
     generate_openings,
@@ -237,6 +238,54 @@ class FakeMatchTests(unittest.TestCase):
         self.assertEqual(summary["draws"], 1)
         self.assertEqual(summary["losses"], 1)
         self.assertAlmostEqual(summary["score_rate"], 0.5)
+
+
+class NativeBaselinePlayerTests(unittest.TestCase):
+    def setUp(self):
+        self._directory = tempfile.TemporaryDirectory()
+        self.directory = Path(self._directory.name)
+
+    def tearDown(self):
+        self._directory.cleanup()
+
+    def make_fake_baseline(self):
+        script = write_script(
+            self.directory,
+            "fake_baseline.py",
+            textwrap.dedent(
+                """
+                import json, sys
+                for line in sys.stdin:
+                    request = json.loads(line)
+                    method = request["method"]
+                    if method == "quit":
+                        data = {"quitting": True}
+                    elif method == "loadFen":
+                        data = {"fen": request.get("fen", ""), "legalMoves": [],
+                                "result": {"kind": "ongoing", "reason": ""}}
+                    elif method == "analyze":
+                        data = {"depth": request.get("depth", 4), "nodes": 7, "nps": 0,
+                                "scoreCp": 12, "mate": None, "backend": "baseline",
+                                "pv": ["b2b4"]}
+                    else:
+                        data = {"fen": "9/9/9/9/9/9/9/9/9/9 w - - 0 1"}
+                    print(json.dumps({"id": request["id"], "ok": True, "data": data}),
+                          flush=True)
+                    if method == "quit":
+                        break
+                """
+            ),
+        )
+        return script
+
+    def test_baseline_search_returns_engine_move(self):
+        script = self.make_fake_baseline()
+        with NativeEnginePlayer([sys.executable, "-u", str(script)], name="baseline",
+                                difficulty="baseline", depth=4, timeout=10) as player:
+            result = player.search(INITIAL_FEN, 5000)
+            self.assertEqual(result.move, "b2b4")
+            self.assertEqual(result.depth, 4)
+            self.assertEqual(result.score_cp, 12)
 
 
 @unittest.skipUnless(HAVE_REAL_ENGINES, "requires native rules engine and pikafish binaries")

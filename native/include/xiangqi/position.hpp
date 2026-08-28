@@ -71,6 +71,7 @@ public:
 
     [[nodiscard]] std::vector<Move> legalMoves() const;
     [[nodiscard]] std::vector<Move> legalMovesFrom(int square) const;
+    [[nodiscard]] char pieceAt(int square) const { return board_[square]; }
     bool play(Move move, std::string* error = nullptr);
     bool undo();
     [[nodiscard]] bool inCheck(Color color) const;
