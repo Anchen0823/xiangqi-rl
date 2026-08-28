@@ -24,7 +24,11 @@ class FakeFeatures:
 
 
 class FakeTeacher:
+    def __init__(self):
+        self.calls = 0
+
     def evaluate_fen(self, fen, nodes):
+        self.calls += 1
         return TeacherEvaluation(75, "a0a1", nodes + 1)
 
 
@@ -82,6 +86,32 @@ class LabelTests(unittest.TestCase):
             source.write_text('{"ply": 1}\n', encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "line 1"):
                 list(read_source(source))
+
+    def test_cached_teacher_evaluation_skips_engine_search(self):
+        source = iter([
+            SourcePosition(
+                "9/9/9/9/9/9/9/9/9/9 w - - 0 1",
+                0,
+                0.0,
+                teacher_score_cp=123,
+                teacher_nodes=2001,
+                teacher_bestmove="c3c4",
+            )
+        ])
+        teacher = FakeTeacher()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            provenance = DatasetProvenance(
+                "generated:test", "0" * 64, "Example", "Teacher",
+                "https://example.test/teacher", "1" * 64,
+            )
+            with DatasetShardWriter(root, "cached", provenance, 1) as writer:
+                label_records(source, writer, FakeFeatures(), teacher, nodes=10)
+            result = next(read_records(root))
+        self.assertEqual(teacher.calls, 0)
+        self.assertEqual(result.score_cp, 123)
+        self.assertEqual(result.teacher_nodes, 2001)
+        self.assertEqual(result.bestmove, "c3c4")
 
 
 if __name__ == "__main__":
