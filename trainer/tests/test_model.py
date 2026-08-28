@@ -66,6 +66,15 @@ class NnueTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outside"):
             model(*psq, *threat, *psq, *threat, torch.tensor([0, 1, 4]))
 
+    def test_autocast_bucket_merge_uses_dense_output_dtype(self):
+        model = XiangqiNnue(self.config)
+        psq = sparse(self.config.psq_feature_count)
+        threat = sparse(self.config.threat_feature_count)
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            output = model(*psq, *threat, *psq, *threat, torch.tensor([0, 1, 1]))
+        self.assertEqual(tuple(output.shape), (3,))
+        output.sum().backward()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -152,12 +152,19 @@ class XiangqiNnue(nn.Module):
         if bool(((layer_buckets < 0) | (layer_buckets >= self.config.layer_stacks)).any()):
             raise ValueError("layer bucket is outside the configured range")
 
-        dense = transformed.new_zeros(transformed.shape[0])
+        dense: Tensor | None = None
         for bucket in torch.unique(layer_buckets).tolist():
             rows = torch.nonzero(layer_buckets == bucket, as_tuple=False).squeeze(1)
+            bucket_output = self.stacks[bucket](transformed.index_select(0, rows))
+            if dense is None:
+                # Linear layers may be FP16/BF16 under autocast while sparse
+                # EmbeddingBag accumulators intentionally remain FP32.
+                dense = bucket_output.new_zeros(transformed.shape[0])
             dense = dense.index_copy(
-                0, rows, self.stacks[bucket](transformed.index_select(0, rows))
+                0, rows, bucket_output
             )
+        if dense is None:
+            raise ValueError("an NNUE batch must contain at least one position")
 
         stm_psqt = self._psqt(
             stm_psq_indices, stm_psq_offsets, stm_threat_indices, stm_threat_offsets

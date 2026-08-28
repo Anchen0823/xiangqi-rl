@@ -40,7 +40,7 @@ def run() -> dict[str, object]:
         loss.backward()
         optim.step()
         torch.cuda.synchronize()
-        results[str(dtype).split(".")[-1]] = {"loss": float(loss), "backward": True}
+        results[str(dtype).split(".")[-1]] = {"loss": float(loss.detach()), "backward": True}
     results["allocated_mib"] = round(torch.cuda.max_memory_allocated() / 2**20, 2)
     return results
 
