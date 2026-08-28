@@ -1,0 +1,85 @@
+diff --git a/src/engine.cpp b/src/engine.cpp
+index 37b15968..398a90c7 100644
+--- a/src/engine.cpp
++++ b/src/engine.cpp
+@@ -303,6 +303,55 @@ void Engine::trace_eval() const {
+     sync_cout << "\n" << Eval::trace(p, *network) << sync_endl;
+ }
+ 
++std::string Engine::training_features() const {
++    std::ostringstream out;
++    out << "{\"layerBucket\":" << NN::PSQFeatureSet::make_layer_stack_bucket(pos)
++        << ",\"perspectives\":[";
++
++    const Color perspectives[2] = {pos.side_to_move(), ~pos.side_to_move()};
++    for (int perspectiveIndex = 0; perspectiveIndex < 2; ++perspectiveIndex)
++    {
++        if (perspectiveIndex)
++            out << ',';
++        const Color perspective = perspectives[perspectiveIndex];
++        auto [bucket, mirror, attackBucket] =
++          NN::PSQFeatureSet::make_feature_bucket(perspective, pos);
++
++        NN::PSQFeatureSet::IndexList psq;
++        Bitboard                     pieces = pos.pieces();
++        while (pieces)
++        {
++            const Square square = pop_lsb(pieces);
++            psq.push_back(NN::PSQFeatureSet::make_index(
++              perspective, square, pos.piece_on(square), bucket, mirror));
++        }
++
++        NN::ThreatFeatureSet::IndexList threats;
++        NN::ThreatFeatureSet::append_active_indices(perspective, pos, threats);
++
++        const auto writeIndices = [&out](const auto& indices) {
++            out << '[';
++            for (usize index = 0; index < indices.size(); ++index)
++            {
++                if (index)
++                    out << ',';
++                out << indices[index];
++            }
++            out << ']';
++        };
++
++        out << "{\"color\":\"" << (perspective == WHITE ? "red" : "black")
++            << "\",\"featureBucket\":" << bucket << ",\"attackBucket\":" << attackBucket
++            << ",\"mirror\":" << (mirror ? "true" : "false") << ",\"psq\":";
++        writeIndices(psq);
++        out << ",\"threats\":";
++        writeIndices(threats);
++        out << '}';
++    }
++    out << "]}";
++    return out.str();
++}
++
+ const OptionsMap& Engine::get_options() const { return options; }
+ OptionsMap&       Engine::get_options() { return options; }
+ 
+diff --git a/src/engine.h b/src/engine.h
+index 7ae62b14..f52c702a 100644
+--- a/src/engine.h
++++ b/src/engine.h
+@@ -101,6 +101,7 @@ class Engine {
+     // utility functions
+ 
+     void trace_eval() const;
++    std::string training_features() const;
+ 
+     const OptionsMap& get_options() const;
+     OptionsMap&       get_options();
+diff --git a/src/uci.cpp b/src/uci.cpp
+index 1cc837c7..ace9079e 100644
+--- a/src/uci.cpp
++++ b/src/uci.cpp
+@@ -160,6 +160,8 @@ void UCIEngine::loop() {
+             sync_cout << engine.visualize() << sync_endl;
+         else if (token == "eval")
+             engine.trace_eval();
++        else if (token == "training_features")
++            sync_cout << engine.training_features() << sync_endl;
+         else if (token == "compiler")
+             sync_cout << compiler_info() << sync_endl;
+         else if (token == "export_net")

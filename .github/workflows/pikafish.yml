@@ -4,7 +4,9 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - .gitattributes
       - third_party/pikafish.rev
+      - third_party/pikafish-training.patch
       - .github/workflows/pikafish.yml
 
 jobs:
@@ -25,9 +27,16 @@ jobs:
           git clone --filter=blob:none https://github.com/official-pikafish/Pikafish.git native/vendor/Pikafish
           git -C native/vendor/Pikafish fetch --depth 1 origin "$revision"
           git -C native/vendor/Pikafish checkout --detach "$revision"
+          git -C native/vendor/Pikafish apply --check "$GITHUB_WORKSPACE/third_party/pikafish-training.patch"
+          git -C native/vendor/Pikafish apply "$GITHUB_WORKSPACE/third_party/pikafish-training.patch"
       - name: Build AVX2 engine without a network
         working-directory: native/vendor/Pikafish/src
         run: make -j4 build ARCH=x86-64-avx2 COMP=clang EXE=pikafish.exe
+      - name: Verify exact feature export
+        working-directory: native/vendor/Pikafish/src
+        run: |
+          printf 'position startpos\ntraining_features\nquit\n' | ./pikafish.exe > feature-smoke.jsonl
+          grep -E '^\{"layerBucket":[0-9]+,"perspectives":\[' feature-smoke.jsonl
       - uses: actions/upload-artifact@v7
         with:
           name: pikafish-windows-avx2-${{ github.sha }}
