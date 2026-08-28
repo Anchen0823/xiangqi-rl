@@ -3,17 +3,10 @@ param()
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$systemCuda = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2"
-$localCuda = Join-Path $root ".cuda\v13.2"
-$cuda = if ($env:CUDA_PATH -and (Test-Path (Join-Path $env:CUDA_PATH "bin\nvcc.exe"))) {
-    $env:CUDA_PATH
-} elseif (Test-Path (Join-Path $systemCuda "bin\nvcc.exe")) {
-    $systemCuda
-} else {
-    $localCuda
-}
+. (Join-Path $PSScriptRoot "cuda-path.ps1")
+$cuda = Find-CudaToolkit -ProjectRoot $root
+if (-not $cuda) { throw "CUDA 13.x nvcc not found in CUDA_PATH, the system Toolkit, or .cuda\v13.2" }
 $nvcc = Join-Path $cuda "bin\nvcc.exe"
-if (-not (Test-Path $nvcc)) { throw "CUDA 13.2 nvcc not found at $nvcc" }
 $env:CUDA_PATH = $cuda
 $env:Path = "$(Join-Path $cuda 'bin');$env:Path"
 Write-Host "Using CUDA from $cuda"

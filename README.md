@@ -21,7 +21,7 @@
 
 ## 开发
 
-要求 Node.js 22+、Visual Studio 2022 C++ 工具、CMake，以及训练时的 Python 3.12/CUDA 13.2。
+要求 Node.js 22+、Visual Studio 2022 C++ 工具、CMake，以及训练时的 Python 3.12。PyTorch 运行时固定为 cu132；Toolkit 推荐 CUDA 13.2，验证脚本也会自动发现系统安装的更新 CUDA 13.x。
 
 ```powershell
 npm install

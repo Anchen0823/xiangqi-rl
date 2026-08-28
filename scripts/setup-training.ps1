@@ -3,10 +3,11 @@ param([string]$Python = "py -3.12")
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$localCuda = Join-Path $root ".cuda\v13.2"
-if (-not $env:CUDA_PATH -and (Test-Path (Join-Path $localCuda "bin\nvcc.exe"))) {
-    $env:CUDA_PATH = $localCuda
-    $env:Path = "$(Join-Path $localCuda 'bin');$env:Path"
+. (Join-Path $PSScriptRoot "cuda-path.ps1")
+$cuda = Find-CudaToolkit -ProjectRoot $root
+if ($cuda) {
+    $env:CUDA_PATH = $cuda
+    $env:Path = "$(Join-Path $cuda 'bin');$env:Path"
 }
 $venv = Join-Path $root ".venv"
 if (-not (Test-Path $venv)) {
