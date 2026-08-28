@@ -18,4 +18,5 @@ $pythonExe = Join-Path $venv "Scripts\python.exe"
 & $pythonExe -m pip install torch==2.12.1 --index-url https://download.pytorch.org/whl/cu132
 & $pythonExe -m pip install --no-deps -e (Join-Path $root "trainer")
 & $pythonExe -m pip install "numpy>=2.0,<3"
+& $pythonExe -m pip install "zstandard>=0.22,<1"
 & $pythonExe -m xiangqi_nnue.hardware
