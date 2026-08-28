@@ -34,9 +34,13 @@ npm run dev
 训练环境安装与 GPU 烟雾测试：
 
 ```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-local-cuda.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-cuda.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-training.ps1
 .\.venv\Scripts\python.exe -m xiangqi_nnue.smoke
 ```
+
+`setup-local-cuda.ps1` 从 NVIDIA 官方 CUDA 13.2.1 redistributable manifest 下载约 89 MB 的最小编译组件，并逐项校验 SHA-256，安装到仓库忽略的 `.cuda/v13.2`，无需管理员权限且不替换显卡驱动。它提供本项目编译和训练所需的编译器、运行库与 NVVM；Visual Studio 的全局 CUDA 项目模板集成仍需使用 NVIDIA 系统安装器单独安装。
 
 训练数据、检查点、构建产物与第三方引擎源码不进入 Git。冠军权重通过 GitHub Release 发布，并附 SHA-256、训练报告和第三方归属清单。
 

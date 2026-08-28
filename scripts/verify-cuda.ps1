@@ -3,9 +3,20 @@ param()
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$cuda = if ($env:CUDA_PATH) { $env:CUDA_PATH } else { "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2" }
+$systemCuda = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.2"
+$localCuda = Join-Path $root ".cuda\v13.2"
+$cuda = if ($env:CUDA_PATH -and (Test-Path (Join-Path $env:CUDA_PATH "bin\nvcc.exe"))) {
+    $env:CUDA_PATH
+} elseif (Test-Path (Join-Path $systemCuda "bin\nvcc.exe")) {
+    $systemCuda
+} else {
+    $localCuda
+}
 $nvcc = Join-Path $cuda "bin\nvcc.exe"
 if (-not (Test-Path $nvcc)) { throw "CUDA 13.2 nvcc not found at $nvcc" }
+$env:CUDA_PATH = $cuda
+$env:Path = "$(Join-Path $cuda 'bin');$env:Path"
+Write-Host "Using CUDA from $cuda"
 & $nvcc --version
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vcvars = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find VC\Auxiliary\Build\vcvars64.bat
