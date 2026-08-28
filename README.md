@@ -33,7 +33,7 @@ npm run dev
 
 ### 立即试玩
 
-当前仓库尚未产生通过棋力门槛的自研冠军权重。下面的命令会启动桌面游戏，并使用仓库固定、许可已校验的 Fairy-Stockfish CC0 教师作为试玩 AI；界面分析响应中的后端标记为 `cc0-teacher`，不会冒充自研模型。
+当前仓库尚未产生通过棋力门槛的自研冠军权重。若本地已安装仓库固定、许可已校验的 Fairy-Stockfish CC0 教师，native 引擎会在缺少 `models/champion.nnue` 时自动使用它作为试玩 AI；界面分析响应中的后端标记为 `cc0-teacher`，不会冒充自研模型。
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/play-demo.ps1
