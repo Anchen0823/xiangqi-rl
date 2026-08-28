@@ -11,3 +11,8 @@ Runtime and development dependencies retain their respective upstream licenses. 
 ## Data and teacher networks
 
 Only explicitly recorded ODbL-compatible data and CC0 teacher networks are accepted. See `docs/data-policy.md`.
+
+The optional teacher is the GPL-3.0-only Fairy-Stockfish engine with the built-in
+`xiangqi-c07e94a5c7cb.nnue` network. The network is recorded as CC0-1.0 by the
+upstream Xiangqi network licensors. Its pinned release URL, license evidence,
+binary size and SHA-256 are stored in `third_party/fairy-stockfish-teacher.json`.
