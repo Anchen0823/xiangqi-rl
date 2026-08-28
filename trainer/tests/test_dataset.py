@@ -15,9 +15,11 @@ from xiangqi_nnue.features import PerspectiveFeatures, PositionFeatures
 def provenance(**changes):
     values = {
         "source_url": "https://example.test/odbl-games",
+        "source_sha256": "0" * 64,
         "attribution": "Example ODbL collection",
         "teacher_name": "Example CC0 teacher",
         "teacher_url": "https://example.test/cc0-teacher",
+        "teacher_sha256": "1" * 64,
     }
     values.update(changes)
     return DatasetProvenance(**values)
