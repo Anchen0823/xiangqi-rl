@@ -19,6 +19,7 @@ xiangqi-smoke = "xiangqi_nnue.smoke:main"
 xiangqi-teacher = "xiangqi_nnue.teacher:main"
 xiangqi-export-nnue = "xiangqi_nnue.export_nnue:main"
 xiangqi-parity = "xiangqi_nnue.parity:main"
+xiangqi-match = "xiangqi_nnue.match:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
