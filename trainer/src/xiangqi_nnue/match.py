@@ -425,6 +425,43 @@ def wilson_lower_bound(wins: int, draws: int, losses: int, z: float = 1.96) -> f
     return max(0.0, centre - margin)
 
 
+def sprt_llr(
+    wins: int,
+    draws: int,
+    losses: int,
+    alpha: float = 0.05,
+    beta: float = 0.05,
+    h0: float = 0.50,
+    h1: float = 0.60,
+) -> float:
+    """Sequential probability ratio test log-likelihood ratio.
+
+    Uses the standard trinomial model: under hypothesis h, a win has
+    likelihood h, a loss 1-h, and a draw sqrt(h*(1-h)) (draws modeled as the
+    geometric mean, as in fishtest-style SPRT). The caller stops and accepts
+    H1 when the cumulative LLR reaches ln((1-beta)/alpha), and accepts H0
+    when it reaches ln(beta/(1-alpha)).
+    """
+    if not 0.0 < h0 < h1 < 1.0:
+        raise ValueError("hypotheses must satisfy 0 < h0 < h1 < 1")
+    if not (0.0 < alpha < 1.0 and 0.0 < beta < 1.0):
+        raise ValueError("alpha and beta must lie in (0, 1)")
+    if wins < 0 or draws < 0 or losses < 0:
+        raise ValueError("game counts cannot be negative")
+
+    def likelihood(h: float) -> float:
+        win = h ** wins
+        loss = (1.0 - h) ** losses
+        draw = (h * (1.0 - h)) ** (draws / 2.0)
+        return win * loss * draw
+
+    ll1 = likelihood(h1)
+    ll0 = likelihood(h0)
+    if ll0 <= 0.0 or ll1 <= 0.0:
+        return math.inf if ll1 > ll0 else -math.inf
+    return math.log(ll1 / ll0)
+
+
 def summarize_records(records: Sequence[GameRecord], candidate: str) -> dict[str, Any]:
     """Aggregate game records from the ``candidate`` engine's perspective."""
     wins = draws = losses = 0
@@ -444,6 +481,9 @@ def summarize_records(records: Sequence[GameRecord], candidate: str) -> dict[str
         "losses": losses,
         "score_rate": (wins + 0.5 * draws) / total if total else 0.0,
         "wilson_95_lower_bound": wilson_lower_bound(wins, draws, losses),
+        "sprt_llr": sprt_llr(wins, draws, losses),
+        "sprt_h0": 0.50,
+        "sprt_h1": 0.60,
     }
 
 

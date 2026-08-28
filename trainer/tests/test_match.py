@@ -1,4 +1,5 @@
 import json
+import math
 import sys
 import tempfile
 import textwrap
@@ -16,6 +17,7 @@ from xiangqi_nnue.match import (
     UciEngine,
     generate_openings,
     play_game,
+    sprt_llr,
     summarize_records,
     wilson_lower_bound,
     write_pgn,
@@ -249,6 +251,23 @@ class FakeMatchTests(unittest.TestCase):
         self.assertEqual(summary["draws"], 1)
         self.assertEqual(summary["losses"], 1)
         self.assertAlmostEqual(summary["score_rate"], 0.5)
+        # Balanced result at score 0.5 sits below the H1 hypothesis's bound.
+        self.assertLess(summary["sprt_llr"], math.log(0.95 / 0.05))
+
+    def test_sprt_llr_sign_and_bounds(self):
+        # Clear dominance under H1 (score > 0.6) pushes LLR positive past the
+        # H1 acceptance bound ln((1-beta)/alpha) for alpha=beta=0.05.
+        dominant = sprt_llr(560, 0, 240)
+        self.assertGreater(dominant, 0.0)
+        self.assertGreater(dominant, math.log(0.95 / 0.05))
+        # Clear deficit pushes LLR negative past the H0 acceptance bound.
+        self.assertLess(sprt_llr(240, 0, 560), math.log(0.05 / 0.95))
+        # All wins under h0=0.5 eventually pushes LLR past the H1 bound.
+        self.assertGreater(sprt_llr(100, 0, 0), math.log(0.95 / 0.05))
+        with self.assertRaises(ValueError):
+            sprt_llr(1, 0, 0, h0=0.7, h1=0.6)
+        with self.assertRaises(ValueError):
+            sprt_llr(-1, 0, 0)
 
 
 class NativeBaselinePlayerTests(unittest.TestCase):
