@@ -14,6 +14,7 @@ xiangqi-hardware = "xiangqi_nnue.hardware:main"
 xiangqi-features = "xiangqi_nnue.features:main"
 xiangqi-train = "xiangqi_nnue.train:main"
 xiangqi-smoke = "xiangqi_nnue.smoke:main"
+xiangqi-teacher = "xiangqi_nnue.teacher:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

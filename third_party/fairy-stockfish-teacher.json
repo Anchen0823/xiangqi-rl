@@ -1,0 +1,13 @@
+{
+  "name": "Fairy-Stockfish Xiangqi CC0 teacher",
+  "release": "xiangqi-c07e94a5c7cb",
+  "network": "xiangqi-c07e94a5c7cb.nnue",
+  "engineLicense": "GPL-3.0-only",
+  "networkLicense": "CC0-1.0",
+  "sourceUrl": "https://github.com/fairy-stockfish/Fairy-Stockfish",
+  "networkReleaseUrl": "https://github.com/fairy-stockfish/Fairy-Stockfish-NNUE/releases/tag/xiangqi-c07e94a5c7cb",
+  "networkLicenseEvidenceUrl": "https://github.com/official-pikafish/Networks/blob/master/README.md",
+  "assetUrl": "https://github.com/fairy-stockfish/Fairy-Stockfish-NNUE/releases/download/xiangqi-c07e94a5c7cb/fairy-stockfish_x86-64-avx2.exe",
+  "assetSha256": "51e9a1732abb3e14a896e8534d68152b46a1357517886ae70f9983bf9767e10b",
+  "assetBytes": 13471232
+}
