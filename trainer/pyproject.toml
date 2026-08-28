@@ -13,6 +13,7 @@ dependencies = ["numpy>=2.0,<3", "torch==2.12.1"]
 xiangqi-hardware = "xiangqi_nnue.hardware:main"
 xiangqi-features = "xiangqi_nnue.features:main"
 xiangqi-label = "xiangqi_nnue.label:main"
+xiangqi-selfplay = "xiangqi_nnue.selfplay:main"
 xiangqi-train = "xiangqi_nnue.train:main"
 xiangqi-smoke = "xiangqi_nnue.smoke:main"
 xiangqi-teacher = "xiangqi_nnue.teacher:main"

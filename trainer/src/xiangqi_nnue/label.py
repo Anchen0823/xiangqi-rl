@@ -28,6 +28,8 @@ class TeacherSource(Protocol):
 
 
 def file_sha256(path: Path) -> str:
+    if path.is_dir():
+        path = path / "manifest.json"
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -35,7 +37,7 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def read_source(path: Path) -> Iterator[SourcePosition]:
+def _read_source_file(path: Path) -> Iterator[SourcePosition]:
     with path.open("rt", encoding="utf-8") as stream:
         for line_number, line in enumerate(stream, 1):
             if not line.strip():
@@ -50,6 +52,21 @@ def read_source(path: Path) -> Iterator[SourcePosition]:
             except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
                 raise ValueError(f"invalid source record at line {line_number}: {error}") from error
             yield position
+
+
+def read_source(path: Path) -> Iterator[SourcePosition]:
+    if path.is_file():
+        yield from _read_source_file(path)
+        return
+    manifest_path = path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schemaVersion") != 1 or manifest.get("license") != "ODbL-1.0":
+        raise ValueError("self-play source manifest must be schema 1 and ODbL-1.0")
+    for game in manifest.get("games", []):
+        game_path = path / game["file"]
+        if file_sha256(game_path) != game["sha256"]:
+            raise ValueError(f"self-play source checksum mismatch for {game_path.name}")
+        yield from _read_source_file(game_path)
 
 
 # Used only to reuse TrainingRecord's scalar/FEN validation before feature extraction.
@@ -102,7 +119,10 @@ def label_records(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create resumable CC0 teacher label shards")
-    parser.add_argument("--source", type=Path, required=True, help="ODbL JSONL positions")
+    parser.add_argument(
+        "--source", type=Path, required=True,
+        help="ODbL JSONL positions or a verified self-play source directory",
+    )
     parser.add_argument("--source-url", required=True)
     parser.add_argument("--attribution", required=True)
     parser.add_argument("--dataset", type=Path, required=True)
