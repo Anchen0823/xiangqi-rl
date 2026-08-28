@@ -60,6 +60,8 @@ class UciEngine:
         threads: int = 1,
         hash_mb: int = 16,
         timeout: float = 30.0,
+        variant: str | None = None,
+        coordinate_flip: bool = False,
     ) -> None:
         if timeout <= 0:
             raise ValueError("timeout must be positive")
@@ -73,6 +75,8 @@ class UciEngine:
             raise FileNotFoundError(f"eval file not found: {eval_file}")
         self.name = name or engine_path.stem
         self.timeout = timeout
+        self.variant = variant
+        self.coordinate_flip = coordinate_flip
         self._process = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE,
@@ -134,12 +138,32 @@ class UciEngine:
     def _handshake(self, eval_file: str | Path | None, threads: int, hash_mb: int) -> None:
         self._send("uci")
         self._wait_for("uciok")
+        if self.variant is not None:
+            self._send(f"setoption name UCI_Variant value {self.variant}")
         if eval_file is not None:
             self._send(f"setoption name EvalFile value {Path(eval_file).resolve()}")
         self._send(f"setoption name Threads value {max(1, int(threads))}")
         self._send(f"setoption name Hash value {max(1, int(hash_mb))}")
         self._send("isready")
         self._wait_for("readyok")
+
+    def _to_ucci(self, move: str) -> str:
+        """Convert a Fairy-Stockfish Xiangqi move to UCCI coordinates.
+
+        Fairy-Stockfish numbers ranks 1..10 from red's back rank (rank 1);
+        UCCI uses 0..9. Files a..i are identical, so the conversion is
+        ``ucci_rank = fairy_rank - 1`` for both endpoints.
+        """
+        if not self.coordinate_flip or len(move) < 4:
+            return move
+        match = re.fullmatch(r"([a-i])(\d{1,2})([a-i])(\d{1,2})", move)
+        if not match:
+            return move
+        from_rank = int(match.group(2))
+        to_rank = int(match.group(4))
+        if not 1 <= from_rank <= 10 or not 1 <= to_rank <= 10:
+            return move
+        return f"{match.group(1)}{from_rank - 1}{match.group(3)}{to_rank - 1}"
 
     def new_game(self) -> None:
         """Clear transposition-table state between games (UCI ``ucinewgame``)."""
@@ -167,7 +191,7 @@ class UciEngine:
                 else:
                     match = BESTMOVE_PATTERN.match(line)
                     if match:
-                        result.move = match.group(1)
+                        result.move = self._to_ucci(match.group(1))
                         return result
 
     @staticmethod
@@ -514,6 +538,8 @@ def main() -> None:
         description="Play deterministic UCI-engine Xiangqi matches with a rules referee"
     )
     parser.add_argument("--engine", action="append", help="UCI engine path (repeat for red/black)")
+    parser.add_argument("--teacher", action="append",
+                        help="Fairy-Stockfish teacher path; enables UCI_Variant=xiangqi + rank flip")
     parser.add_argument("--baseline", action="append", help="native engine used as baseline player (repeat for red/black)")
     parser.add_argument("--baseline-depth", type=int, default=3, help="depth for --baseline players")
     parser.add_argument("--eval-file", action="append", default=[], help="NNUE eval file per engine")
@@ -532,14 +558,17 @@ def main() -> None:
     args = parser.parse_args()
 
     uci_paths = [Path(value) for value in args.engine or []]
+    teacher_paths = [Path(value) for value in args.teacher or []]
     baseline_paths = [Path(value) for value in args.baseline or []]
     # A single entry duplicates to both sides (self-play / baseline mirror).
-    if len(uci_paths) == 1 and not baseline_paths:
+    if len(uci_paths) == 1 and not baseline_paths and not teacher_paths:
         uci_paths = [uci_paths[0], uci_paths[0]]
-    if len(baseline_paths) == 1 and not uci_paths:
+    if len(teacher_paths) == 1 and not baseline_paths and not uci_paths:
+        teacher_paths = [teacher_paths[0], teacher_paths[0]]
+    if len(baseline_paths) == 1 and not uci_paths and not teacher_paths:
         baseline_paths = [baseline_paths[0], baseline_paths[0]]
-    if len(uci_paths) + len(baseline_paths) != 2:
-        parser.error("provide two players total: --engine and/or --baseline, each 1 or 2 entries")
+    if len(uci_paths) + len(teacher_paths) + len(baseline_paths) != 2:
+        parser.error("provide two players total: --engine / --teacher / --baseline, each 1 or 2 entries")
 
     eval_files = list(args.eval_file) or [None, None]
     if len(eval_files) == 1:
@@ -550,18 +579,22 @@ def main() -> None:
     if len(names) == 1:
         names = [names[0], names[0]]
 
-    # Red is the first player listed, black the second. One UCI engine paired
-    # with one baseline is the canonical candidate-vs-baseline setup.
+    # Red is the first player listed, black the second. The canonical setups:
+    # one UCI engine vs one baseline (Gate 1) or one UCI engine vs one teacher
+    # (Gate 2). Any single-player type duplicates to both sides.
+    ordered: list[tuple[str, Path]] = (
+        [("uci", value) for value in uci_paths]
+        + [("teacher", value) for value in teacher_paths]
+        + [("baseline", value) for value in baseline_paths]
+    )
     specs: list[tuple[str, Path]] = []
     for index in range(2):
-        if index < len(uci_paths):
-            specs.append(("uci", uci_paths[index]))
+        if index < len(ordered):
+            specs.append(ordered[index])
+        elif ordered:
+            specs.append(ordered[-1])
         else:
-            specs.append(("baseline", baseline_paths[0]))
-    if len(uci_paths) == 2:
-        specs = [("uci", uci_paths[0]), ("uci", uci_paths[1])]
-    if len(baseline_paths) == 2:
-        specs = [("baseline", baseline_paths[0]), ("baseline", baseline_paths[1])]
+            parser.error("no players provided")
 
     engines: dict[str, UciEngine | NativeEnginePlayer] = {}
     for index, (kind, path) in enumerate(specs):
@@ -576,6 +609,8 @@ def main() -> None:
             engines[side] = UciEngine(
                 path, name=display, eval_file=eval_files[index],
                 threads=args.threads, hash_mb=args.hash_mb, timeout=args.timeout,
+                variant="xiangqi" if kind == "teacher" else None,
+                coordinate_flip=kind == "teacher",
             )
     try:
         summary = run_match(

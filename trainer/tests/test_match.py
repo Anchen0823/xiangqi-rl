@@ -118,6 +118,17 @@ class BestMoveParsingTests(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertEqual(match.group(1), "e2e4")
 
+    def test_fairy_coordinate_flip_maps_ranks_down(self):
+        # Fairy-Stockfish ranks 1..10 from red's back rank; UCCI ranks 0..9.
+        with tempfile.TemporaryDirectory() as directory:
+            script = write_script(Path(directory), "fake_engine.py", FAKE_ENGINE_SCRIPT)
+            with UciEngine([sys.executable, "-u", str(script)], name="fake",
+                           coordinate_flip=True, timeout=10) as engine:
+                self.assertEqual(engine._to_ucci("b2b4"), "b1b3")
+                self.assertEqual(engine._to_ucci("e10e9"), "e9e8")
+                self.assertEqual(engine._to_ucci("a1a2"), "a0a1")
+                self.assertEqual(engine._to_ucci("h10g8"), "h9g7")
+
 
 class WilsonTests(unittest.TestCase):
     def test_empty_sample_returns_zero(self):
