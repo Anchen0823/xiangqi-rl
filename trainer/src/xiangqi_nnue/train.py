@@ -13,12 +13,16 @@ from .model import NnueConfig, XiangqiNnue
 from .thermal import wait_for_safe_temperature
 
 
-def synthetic_batch(device: torch.device, batch: int, active: int, features: int):
-    def bag():
-        indices = torch.randint(features, (batch * active,), device=device)
+def synthetic_batch(device: torch.device, batch: int, active: int, config: NnueConfig):
+    def bag(feature_count: int):
+        indices = torch.randint(feature_count, (batch * active,), device=device)
         offsets = torch.arange(0, (batch + 1) * active, active, device=device)
         return indices, offsets
-    return (*bag(), *bag(), torch.empty(batch, device=device).uniform_(-1, 1))
+    psq = lambda: bag(config.psq_feature_count)
+    threat = lambda: bag(config.threat_feature_count)
+    buckets = torch.randint(config.layer_stacks, (batch,), device=device)
+    return (*psq(), *threat(), *psq(), *threat(), buckets,
+            torch.empty(batch, device=device).uniform_(-1, 1))
 
 
 def save_checkpoint(path: Path, model: XiangqiNnue, optimizer: torch.optim.Optimizer, step: int) -> None:
@@ -53,11 +57,11 @@ def main() -> None:
         optimizer.zero_grad(set_to_none=True)
         loss_value = 0.0
         for _ in range(args.accumulate):
-            stm_i, stm_o, opp_i, opp_o, target = synthetic_batch(
-                device, args.micro_batch, 32, model.config.feature_count
+            *features, target = synthetic_batch(
+                device, args.micro_batch, 32, model.config
             )
             with torch.autocast(device.type, enabled=device.type == "cuda", dtype=torch.float16):
-                prediction = model(stm_i, stm_o, opp_i, opp_o)
+                prediction = model(*features)
                 loss = torch.nn.functional.huber_loss(prediction, target) / args.accumulate
             loss.backward(); loss_value += float(loss.detach())
         optimizer.step()
@@ -69,3 +73,7 @@ def main() -> None:
             save_checkpoint(args.checkpoint, model, optimizer, step)
             checkpoint_at = time.monotonic() + 1800
     save_checkpoint(args.checkpoint, model, optimizer, max(start, args.steps - 1))
+
+
+if __name__ == "__main__":
+    main()

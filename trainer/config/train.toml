@@ -1,8 +1,10 @@
 [model]
-feature_count = 131072
+psq_feature_count = 16536
+threat_feature_count = 45547
 accumulator_size = 1024
 hidden1 = 32
 hidden2 = 32
+layer_stacks = 16
 
 [training]
 seed = 823
