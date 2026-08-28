@@ -34,6 +34,15 @@ struct Result {
     std::string reason = "ongoing";
 };
 
+struct RepetitionResponsibility {
+    bool longCheck = false;
+    bool longChase = false;
+};
+
+[[nodiscard]] Result adjudicateRepetitionCycle(RepetitionResponsibility red,
+                                               RepetitionResponsibility black,
+                                               bool earlyDrawRequiresRedDeviation);
+
 struct MoveRecord {
     Move move;
     Color mover = Color::Red;
@@ -112,7 +121,8 @@ private:
     [[nodiscard]] bool legalAfter(Move move, Color mover) const;
     [[nodiscard]] int kingSquare(Color color) const;
     [[nodiscard]] bool squareAttacked(int square, Color by) const;
-    [[nodiscard]] std::set<std::uint8_t> chasedByMove(Move move, Color mover) const;
+    [[nodiscard]] std::set<std::uint8_t> chasedByMove(Move move, Color mover, char captured,
+                                                     bool answeredCheck) const;
     [[nodiscard]] bool defended(int square, Color color) const;
     [[nodiscard]] static int pieceValue(char piece);
     void adjudicateRepetition();
