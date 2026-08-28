@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import os
+import re
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,7 +14,7 @@ from typing import Any, Iterator
 from .features import PositionFeatures, parse_training_features
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 GAME_DATA_LICENSE = "ODbL-1.0"
 TEACHER_LICENSE = "CC0-1.0"
 
@@ -21,9 +22,11 @@ TEACHER_LICENSE = "CC0-1.0"
 @dataclass(frozen=True)
 class DatasetProvenance:
     source_url: str
+    source_sha256: str
     attribution: str
     teacher_name: str
     teacher_url: str
+    teacher_sha256: str
     game_data_license: str = GAME_DATA_LICENSE
     teacher_license: str = TEACHER_LICENSE
 
@@ -35,25 +38,40 @@ class DatasetProvenance:
         for name in ("source_url", "attribution", "teacher_name", "teacher_url"):
             if not getattr(self, name).strip():
                 raise ValueError(f"provenance field {name} cannot be empty")
+        for name in ("source_sha256", "teacher_sha256"):
+            if not re.fullmatch(r"[0-9a-f]{64}", getattr(self, name)):
+                raise ValueError(f"provenance field {name} must be a lowercase SHA-256")
 
 
 @dataclass(frozen=True)
 class TrainingRecord:
     fen: str
     score_cp: int
-    outcome: float
+    outcome: float | None
     ply: int
     features: PositionFeatures
+    teacher_nodes: int = 0
+    bestmove: str = ""
 
     def validate(self) -> None:
         if not self.fen.strip() or "\n" in self.fen or "\r" in self.fen:
             raise ValueError("record FEN must be a non-empty single line")
         if isinstance(self.score_cp, bool) or not isinstance(self.score_cp, int):
             raise ValueError("score_cp must be an integer")
-        if not math.isfinite(self.outcome) or not -1.0 <= self.outcome <= 1.0:
-            raise ValueError("outcome must be finite and in [-1, 1]")
+        if self.outcome is not None and (
+            not math.isfinite(self.outcome) or not -1.0 <= self.outcome <= 1.0
+        ):
+            raise ValueError("outcome must be null or finite and in [-1, 1]")
         if isinstance(self.ply, bool) or not isinstance(self.ply, int) or self.ply < 0:
             raise ValueError("ply must be a non-negative integer")
+        if (
+            isinstance(self.teacher_nodes, bool)
+            or not isinstance(self.teacher_nodes, int)
+            or self.teacher_nodes < 0
+        ):
+            raise ValueError("teacher_nodes must be a non-negative integer")
+        if "\n" in self.bestmove or "\r" in self.bestmove:
+            raise ValueError("bestmove must be a single line")
 
     def to_dict(self) -> dict[str, Any]:
         self.validate()
@@ -74,6 +92,8 @@ class TrainingRecord:
             "scoreCp": self.score_cp,
             "outcome": self.outcome,
             "ply": self.ply,
+            "teacherNodes": self.teacher_nodes,
+            "bestmove": self.bestmove,
             "features": {
                 "layerBucket": self.features.layer_bucket,
                 "perspectives": perspectives,
@@ -93,6 +113,8 @@ class TrainingRecord:
                 features=parse_training_features(
                     json.dumps(payload["features"], separators=(",", ":"))
                 ),
+                teacher_nodes=payload.get("teacherNodes", 0),
+                bestmove=payload.get("bestmove", ""),
             )
         except KeyError as error:
             raise ValueError(f"training record is missing {error.args[0]}") from error
