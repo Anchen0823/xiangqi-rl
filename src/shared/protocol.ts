@@ -26,7 +26,7 @@ export interface Analysis {
   scoreCp: number;
   mate: number | null;
   pv: string[];
-  backend?: 'pikafish' | 'fallback';
+  backend?: 'pikafish' | 'cc0-teacher' | 'fallback';
   status?: string;
 }
 export interface EngineResponse<T = unknown> { id: string; ok: boolean; data?: T; error?: string }

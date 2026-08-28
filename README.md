@@ -31,6 +31,63 @@ npm test
 npm run dev
 ```
 
+### 立即试玩
+
+当前仓库尚未产生通过棋力门槛的自研冠军权重。下面的命令会启动桌面游戏，并使用仓库固定、许可已校验的 Fairy-Stockfish CC0 教师作为试玩 AI；界面分析响应中的后端标记为 `cc0-teacher`，不会冒充自研模型。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/play-demo.ps1
+```
+
+首次缺少教师引擎时先运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-teacher.ps1
+```
+
+进入游戏后选择“人机对弈”、执红或执黑以及五档棋力即可。关闭 Electron 窗口或在启动终端按 `Ctrl+C` 停止。
+
+### 立即看到 CUDA 训练成果
+
+本机已有校准标签时，以下命令会在 RTX GPU 上训练 21 步，输出第 0、10、20 步 loss，并生成不入 Git 的 `checkpoints/demo.pt`：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/train-demo.ps1
+```
+
+继续同一 checkpoint 至 41 步：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/train-demo.ps1 -Steps 41 -Resume
+```
+
+#### 生成新的演示数据
+
+以下流程生成 2 局规则安全的自博弈源数据，再提取 Pikafish 精确稀疏特征并写成可恢复标签分片：
+
+```powershell
+.\.venv\Scripts\python.exe -m xiangqi_nnue.selfplay `
+  --rules-engine .\build\native\xiangqi-engine.exe `
+  --teacher-engine .\native\bin\fairy-stockfish-teacher.exe `
+  --teacher-manifest .\third_party\fairy-stockfish-teacher.json `
+  --output .\datasets\demo-source --games 2 --nodes 2000 `
+  --max-plies 240 --random-plies 4 --workers 1
+
+.\.venv\Scripts\python.exe -m xiangqi_nnue.label `
+  --source .\datasets\demo-source `
+  --source-url "local:selfplay-demo" --attribution "Xiangqi RL self-play" `
+  --dataset .\datasets\demo-labeled --dataset-id demo-v1 `
+  --feature-engine .\native\bin\pikafish.exe `
+  --teacher-engine .\native\bin\fairy-stockfish-teacher.exe `
+  --teacher-manifest .\third_party\fairy-stockfish-teacher.json `
+  --nodes 2000 --threads 1 --hash-mb 128
+
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/train-demo.ps1 `
+  -Dataset datasets\demo-labeled -Checkpoint checkpoints\demo-fresh.pt
+```
+
+演示 loss 下降只证明流水线有效，不等于达到业余棋手水平。正式宣称棋力前仍须完成大规模数据生成、量化、SPRT、800 局基线赛与线下人类验证。
+
 训练环境安装与 GPU 烟雾测试：
 
 ```powershell
