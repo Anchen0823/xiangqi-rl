@@ -17,6 +17,9 @@ class SourcePosition:
     fen: str
     ply: int
     outcome: float | None
+    teacher_score_cp: int | None = None
+    teacher_nodes: int | None = None
+    teacher_bestmove: str | None = None
 
 
 class FeatureSource(Protocol):
@@ -47,8 +50,32 @@ def _read_source_file(path: Path) -> Iterator[SourcePosition]:
                 fen = payload["fen"]
                 ply = payload.get("ply", line_number - 1)
                 outcome = payload.get("outcome")
-                position = SourcePosition(fen, ply, outcome)
+                position = SourcePosition(
+                    fen,
+                    ply,
+                    outcome,
+                    payload.get("teacherScoreCp"),
+                    payload.get("teacherNodes"),
+                    payload.get("teacherBestmove"),
+                )
                 TrainingRecord(fen, 0, outcome, ply, _DUMMY_FEATURES).validate()
+                cached = (
+                    position.teacher_score_cp,
+                    position.teacher_nodes,
+                    position.teacher_bestmove,
+                )
+                if any(value is not None for value in cached):
+                    if not all(value is not None for value in cached):
+                        raise ValueError("cached teacher fields must be all present or all absent")
+                    TrainingRecord(
+                        fen,
+                        position.teacher_score_cp,
+                        outcome,
+                        ply,
+                        _DUMMY_FEATURES,
+                        position.teacher_nodes,
+                        position.teacher_bestmove,
+                    ).validate()
             except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
                 raise ValueError(f"invalid source record at line {line_number}: {error}") from error
             yield position
@@ -99,7 +126,15 @@ def label_records(
             continue
         if limit is not None and accepted >= limit:
             break
-        evaluation = teacher.evaluate_fen(position.fen, nodes)
+        if position.teacher_score_cp is None:
+            evaluation = teacher.evaluate_fen(position.fen, nodes)
+        else:
+            assert position.teacher_nodes is not None and position.teacher_bestmove is not None
+            evaluation = TeacherEvaluation(
+                position.teacher_score_cp,
+                position.teacher_bestmove,
+                position.teacher_nodes,
+            )
         writer.write(
             TrainingRecord(
                 fen=position.fen,
@@ -143,6 +178,10 @@ def main() -> None:
         raise ValueError("teacher manifest does not grant CC0-1.0 for the network")
     if teacher_hash != teacher_manifest.get("assetSha256"):
         raise ValueError("teacher executable does not match the pinned manifest SHA-256")
+    if args.source.is_dir():
+        source_manifest = json.loads((args.source / "manifest.json").read_text(encoding="utf-8"))
+        if source_manifest.get("config", {}).get("teacherSha256") != teacher_hash:
+            raise ValueError("self-play source teacher SHA-256 does not match the labeler teacher")
     provenance = DatasetProvenance(
         source_url=args.source_url,
         source_sha256=file_sha256(args.source),

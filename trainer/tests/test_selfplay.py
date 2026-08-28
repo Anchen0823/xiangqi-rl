@@ -48,6 +48,8 @@ class SelfplayTests(unittest.TestCase):
         )
         self.assertEqual(game.result, "red_win")
         self.assertEqual([item["outcome"] for item in game.positions], [1.0, -1.0])
+        self.assertEqual([item["teacherBestmove"] for item in game.positions], ["a0a1", "a0a1"])
+        self.assertEqual([item["teacherNodes"] for item in game.positions], [10, 10])
 
     def test_writer_resumes_and_rejects_config_change(self):
         with tempfile.TemporaryDirectory() as temporary:

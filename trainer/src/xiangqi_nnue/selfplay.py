@@ -80,14 +80,21 @@ def play_game(
         if result["kind"] != "ongoing":
             break
         fen = snapshot["fen"]
-        positions.append({"fen": fen, "ply": ply})
+        position = {"fen": fen, "ply": ply}
+        positions.append(position)
         legal = snapshot["legalMoves"]
         if not legal:
             raise ValueError("ongoing rules snapshot has no legal moves")
         if ply < random_plies:
             move = rng.choice(legal)
         else:
-            move = fairy_move_to_ucci(teacher.evaluate_fen(fen, nodes).bestmove)
+            evaluation = teacher.evaluate_fen(fen, nodes)
+            move = fairy_move_to_ucci(evaluation.bestmove)
+            position.update({
+                "teacherScoreCp": evaluation.score_cp,
+                "teacherNodes": evaluation.nodes,
+                "teacherBestmove": move,
+            })
             if move not in legal:
                 raise ValueError(f"teacher returned illegal move {move}")
         snapshot = rules.play_move(move)
