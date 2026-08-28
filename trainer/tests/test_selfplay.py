@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from xiangqi_nnue.selfplay import SelfplaySourceWriter, fairy_move_to_ucci, play_game
-from xiangqi_nnue.teacher import TeacherEvaluation
+from xiangqi_nnue.selfplay import SelfplaySourceWriter, play_game
+from xiangqi_nnue.teacher import TeacherEvaluation, fairy_move_to_ucci
 from xiangqi_nnue.label import file_sha256, read_source
 
 
@@ -31,7 +31,8 @@ class FakeRules:
 
 class FakeTeacher:
     def evaluate_fen(self, fen, nodes):
-        return TeacherEvaluation(10, "a1a2", nodes)
+        # evaluate_fen now returns UCCI moves directly.
+        return TeacherEvaluation(10, "a0a1", nodes)
 
 
 class SelfplayTests(unittest.TestCase):
