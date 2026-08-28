@@ -21,6 +21,11 @@ std::filesystem::path configuredPath(const char* variable, const std::filesystem
     return std::filesystem::current_path() / fallback;
 }
 
+std::string configuredValue(const char* variable, std::string fallback = {}) {
+    if (const char* value = std::getenv(variable); value && *value) return value;
+    return fallback;
+}
+
 } // namespace
 
 void parseUciInfo(std::string_view line, SearchResult& result) {
@@ -49,6 +54,9 @@ void parseUciInfo(std::string_view line, SearchResult& result) {
 struct PikafishClient::Impl {
     std::filesystem::path executable = configuredPath("XIANGQI_PIKAFISH_PATH", "native/bin/pikafish.exe");
     std::filesystem::path network = configuredPath("XIANGQI_NNUE_PATH", "models/champion.nnue");
+    const bool embeddedNetwork = configuredValue("XIANGQI_EMBEDDED_NNUE") == "1";
+    const std::string variant = configuredValue("XIANGQI_UCI_VARIANT");
+    const std::string backend = configuredValue("XIANGQI_SEARCH_BACKEND", "pikafish");
     std::string message;
 #ifdef _WIN32
     HANDLE process = nullptr;
@@ -98,7 +106,7 @@ struct PikafishClient::Impl {
             message = "Pikafish executable not installed";
             return false;
         }
-        if (!std::filesystem::is_regular_file(network)) {
+        if (!embeddedNetwork && !std::filesystem::is_regular_file(network)) {
             message = "Champion NNUE not installed";
             return false;
         }
@@ -132,7 +140,8 @@ struct PikafishClient::Impl {
         CloseHandle(processInfo.hThread);
         writeLine("uci");
         if (!waitFor("uciok", std::chrono::seconds(10))) { message = "Pikafish UCI handshake failed"; return false; }
-        writeLine("setoption name EvalFile value " + network.string());
+        if (!variant.empty()) writeLine("setoption name UCI_Variant value " + variant);
+        if (!embeddedNetwork) writeLine("setoption name EvalFile value " + network.string());
         writeLine("setoption name Threads value 1");
         writeLine("setoption name Hash value 128");
         writeLine("isready");
@@ -165,6 +174,8 @@ bool PikafishClient::available() const {
     return false;
 #endif
 }
+
+std::string PikafishClient::backend() const { return impl_->backend; }
 
 std::string PikafishClient::status() const { return impl_->message; }
 

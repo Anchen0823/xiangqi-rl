@@ -28,6 +28,7 @@ public:
     PikafishClient& operator=(const PikafishClient&) = delete;
 
     [[nodiscard]] bool available() const;
+    [[nodiscard]] std::string backend() const;
     [[nodiscard]] std::string status() const;
     std::optional<SearchResult> analyze(std::string_view fen, int depth);
     void stop();

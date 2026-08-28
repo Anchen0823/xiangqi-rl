@@ -162,7 +162,7 @@ int main() {
                 analysis << "{\"depth\":" << searched->depth << ",\"nodes\":" << searched->nodes
                          << ",\"nps\":" << searched->nps << ",\"scoreCp\":" << searched->scoreCp * sign
                          << ",\"mate\":" << (searched->mate ? std::to_string(*searched->mate * sign) : "null")
-                         << ",\"backend\":\"pikafish\",\"pv\":";
+                         << ",\"backend\":\"" << escapeJson(search.backend()) << "\",\"pv\":";
                 analysis << '[';
                 for (std::size_t i = 0; i < searched->pv.size(); ++i) {
                     if (i) analysis << ',';
