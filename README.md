@@ -24,14 +24,20 @@
 要求 Node.js 22+、Visual Studio 2022 C++ 工具、CMake，以及训练时的 Python 3.12。PyTorch 运行时固定为 cu132；Toolkit 推荐 CUDA 13.2，验证脚本也会自动发现系统安装的更新 CUDA 13.x。
 
 ```powershell
-npm install
+git clone https://github.com/Anchen0823/xiangqi-rl.git
+cd xiangqi-rl
+npm ci
 npm run native:configure
 npm run native:build
 npm test
 npm run dev
 ```
 
+命令从仓库根目录执行。Windows PowerShell 若限制 `npm.ps1`，可将 `npm` 替换为 `npm.cmd`。纯桌面试玩不要求先安装 CUDA 或准备训练数据。
+
 ### 立即试玩
+
+先完成上面的依赖安装与原生构建配置。首次试玩的完整顺序为：安装 Node 依赖 → `native:configure` → 安装教师引擎 → 运行 `play-demo.ps1`。
 
 当前仓库尚未产生通过棋力门槛的自研冠军权重。若本地已安装仓库固定、许可已校验的 Fairy-Stockfish CC0 教师，native 引擎会在缺少 `models/champion.nnue` 时自动使用它作为试玩 AI；界面分析响应中的后端标记为 `cc0-teacher`，不会冒充自研模型。
 
@@ -62,6 +68,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/train-demo.ps1 -Step
 ```
 
 #### 生成新的演示数据
+
+新克隆不包含 `.venv`、数据集或引擎二进制。先完成下方训练环境安装，再安装 CC0 教师，并按 [scripts/fetch-pikafish.ps1](scripts/fetch-pikafish.ps1) 或 [scripts/install-pikafish-artifact.ps1](scripts/install-pikafish-artifact.ps1) 的参数准备支持特征导出的 Pikafish。`label` 步骤同时需要规则安全的源数据、教师和特征引擎。
 
 以下流程生成 2 局规则安全的自博弈源数据，再提取 Pikafish 精确稀疏特征并写成可恢复标签分片：
 
@@ -99,7 +107,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-training.ps1
 
 `setup-local-cuda.ps1` 从 NVIDIA 官方 CUDA 13.2.1 redistributable manifest 下载约 89 MB 的最小编译组件，并逐项校验 SHA-256，安装到仓库忽略的 `.cuda/v13.2`，无需管理员权限且不替换显卡驱动。它提供本项目编译和训练所需的编译器、运行库与 NVVM；Visual Studio 的全局 CUDA 项目模板集成仍需使用 NVIDIA 系统安装器单独安装。
 
-训练数据、检查点、构建产物与第三方引擎源码不进入 Git。冠军权重通过 GitHub Release 发布，并附 SHA-256、训练报告和第三方归属清单。
+训练数据、检查点、构建产物与第三方引擎源码不进入 Git。通过验收后的冠军权重计划通过 GitHub Release 发布，并附 SHA-256、训练报告和第三方归属清单；当前 README 不代表已有可下载的合格冠军权重。
+
+## 文档导航
+
+| 文档 | 内容 |
+| --- | --- |
+| [开发状态](docs/development-status.md) | 模块进展与未完成事项 |
+| [训练报告](docs/training-report-2026-08-28.md) | 2026-08-28 的训练记录和结论边界 |
+| [棋力验收协议](docs/strength-protocol.md) | 基线赛、教师赛和人类验证要求 |
+| [数据政策](docs/data-policy.md) | 数据来源与许可要求 |
+| [NNUE 导出与一致性](docs/nnue-export-parity.md) | 训练检查点到引擎权重的验证要求 |
+| [第三方声明](THIRD_PARTY_NOTICES.md) | 引擎与数据归属 |
 
 ## 许可证
 
