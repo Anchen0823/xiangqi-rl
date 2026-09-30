@@ -41,6 +41,36 @@ std::string configuredValue(const char* variable, std::string fallback = {}) {
 
 } // namespace
 
+std::string goCommand(const SearchLimits& limits) {
+    // Pikafish treats go limits as independent AND-ed constraints: the search
+    // stops on whichever binds first, so nodes and movetime are combined on
+    // purpose. The depth cap is emitted only as a runaway guard and never
+    // duplicated, and a limits set with no budget still searches by depth.
+    std::string command = "go";
+    const bool hasNodes = limits.nodes > 0;
+    const bool hasTime = limits.millis > 0;
+    if (hasNodes) command += " nodes " + std::to_string(limits.nodes);
+    if (hasTime) command += " movetime " + std::to_string(limits.millis);
+    if (!hasNodes && !hasTime) command += " depth " + std::to_string(std::clamp(limits.maxDepth, 1, 64));
+    return command;
+}
+
+SearchLimits difficultyLimits(std::string_view difficulty) {
+    // Fixed depths made every level an exact, reproducible cap. Budgets let the
+    // search use whatever depth the position and clock allow, so a stronger
+    // level is a larger search, not an arbitrary one more ply.
+    //
+    // maxDepth is only a runaway guard, so it is deliberately set above what
+    // the node/time budget can reach: if it binds first, the level silently
+    // degrades back into a fixed ply count, which is the behaviour this change
+    // exists to remove.
+    if (difficulty == "beginner") return {30'000, 120, 12};
+    if (difficulty == "casual") return {200'000, 400, 20};
+    if (difficulty == "advanced") return {1'200'000, 1200, 24};
+    if (difficulty == "expert") return {6'000'000, 4000, 32};
+    return {3'000'000, 2000, 28}; // club
+}
+
 void parseUciInfo(std::string_view line, SearchResult& result) {
     std::istringstream input{std::string(line)};
     std::string token;
@@ -195,13 +225,22 @@ std::string PikafishClient::backend() const { return impl_->backend; }
 
 std::string PikafishClient::status() const { return impl_->message; }
 
-std::optional<SearchResult> PikafishClient::analyze(std::string_view fen, int depth) {
+std::optional<SearchResult> PikafishClient::analyze(std::string_view fen, const SearchLimits& limits,
+                                                    const AbortCheck& shouldAbort) {
 #ifdef _WIN32
     if (!available()) return std::nullopt;
     impl_->writeLine("position fen " + std::string(fen));
-    impl_->writeLine("go depth " + std::to_string(std::clamp(depth, 1, 64)));
+    impl_->writeLine(goCommand(limits));
     SearchResult result;
-    while (auto line = impl_->readLine(std::chrono::seconds(60))) {
+    for (;;) {
+        // Bounded wait, not one long read: a search that owns this thread must
+        // still give its caller a chance to relay `stop` to Pikafish.
+        auto line = impl_->readLine(std::chrono::milliseconds(50));
+        if (!line) {
+            if (WaitForSingleObject(impl_->process, 0) == WAIT_OBJECT_0) return std::nullopt;
+            if (shouldAbort && shouldAbort()) return result;
+            continue;
+        }
         if (line->starts_with("info ")) parseUciInfo(*line, result);
         else if (line->starts_with("bestmove ")) {
             std::istringstream best(*line);
@@ -211,8 +250,10 @@ std::optional<SearchResult> PikafishClient::analyze(std::string_view fen, int de
             return result;
         }
     }
-#endif
+#else
+    (void)fen; (void)limits; (void)shouldAbort;
     return std::nullopt;
+#endif
 }
 
 void PikafishClient::stop() {

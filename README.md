@@ -19,6 +19,9 @@
 - `trainer/`：NNUE 模型、CUDA/PyTorch 诊断与训练入口。
 - `docs/`：规则映射、数据许可、训练和棋力验收记录。
 
+难度档位不再固定思考层数，而是对应搜索预算（节点数 + 时限 + 深度上限），
+深度是搜索的结果而非硬编码常数。详见 `docs/search-budgets.md`。
+
 ## 开发
 
 要求 Node.js 22+、Visual Studio 2022 C++ 工具、CMake，以及训练时的 Python 3.12。PyTorch 运行时固定为 cu132；Toolkit 推荐 CUDA 13.2，验证脚本也会自动发现系统安装的更新 CUDA 13.x。
@@ -32,6 +35,38 @@ npm run dev
 ```
 
 ### 立即试玩
+
+试玩 2026-09-30 扩充续训候选：双击项目根目录的 `试玩新模型.cmd`。
+它加载 `checkpoints/expanded-20260930/candidate.nnue`，不会替换冠军模型。
+要用上一轮候选对照试玩：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/play-candidate.ps1 `
+  -Network checkpoints\continue-20260930\candidate.nnue
+```
+
+进入后选择"人机对弈"，默认执红，点击棋子再点击目标位置即可。
+推荐着法和着法记录使用中象记谱：红方如“炮二平五”，黑方如“马8进7”；
+同路重子用前/中/后区分，多路重兵补充路数以避免歧义。
+棋盘翻转不改变记谱方向，旧 `.xqgame` 存档继续兼容。
+
+对局包含本地合成音效：落子木声、吃子重音、将军钟声，以及将死、困毙、
+和棋的结束提示。音色按事件分层合成——噪声瞬态给木头的撞击感，模态泛音
+模拟棋子的空腔共鸣，钟声用非谐分音并送入短混响；重子（车炮将帅）落点更低
+更长，兵卒更轻更短。每次落子的音高、衰减与声像都有小幅随机化并按棋盘纵深
+定位，连续行棋不会重复同一个音。选中棋子另有轻脆的拾子声。左侧"对局音效"
+可静音、调节音量或试听整套音阶，设置自动保存。
+棋子落定、吃子和将军有独立视觉反馈；终局可选择“留局复盘”或“再弈一局”。
+载入棋谱和悔棋不会重播走子音效，动画尊重系统的“减少动态效果”设置。
+
+首次构建或修改代码后，运行以下命令；后续双击入口直接使用已构建版本：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/play-candidate.ps1
+```
+
+候选启动入口需要本地检查点与 Pikafish 二进制；这些大文件不在 Git 中。
+下述 `play-demo.ps1` 仍用于 CC0 教师试玩。
 
 当前仓库尚未产生通过棋力门槛的自研冠军权重。若本地已安装仓库固定、许可已校验的 Fairy-Stockfish CC0 教师，native 引擎会在缺少 `models/champion.nnue` 时自动使用它作为试玩 AI；界面分析响应中的后端标记为 `cc0-teacher`，不会冒充自研模型。
 

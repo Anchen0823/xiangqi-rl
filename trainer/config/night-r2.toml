@@ -1,0 +1,28 @@
+# Night run r2: warm-start the current best candidate on a freshly generated
+# self-play corpus.
+#
+# Sizing is driven by the measured 4.66 s/optimizer step at batch 8192, which
+# makes training the expensive stage. At ~34 steps per epoch on a ~34k-position
+# corpus, 1500 steps is ~44 epochs and roughly two hours: long enough to decay
+# the learning rate to zero and to trigger early stop, short enough to fit the
+# night's budget. Raising max_epochs cannot extend the run; only TrainSteps can.
+[training]
+seed = 20261001
+batch_size = 8192
+micro_batch_size = 256
+learning_rate = 0.0004
+weight_decay = 0.00001
+# 80 of 1500 steps keeps the warm-up short enough that cosine still spends most
+# of the schedule at a useful rate.
+warmup_steps = 80
+checkpoint_seconds = 120
+memory_soft_limit_gib = 6.5
+system_memory_limit_gib = 12.0
+temperature_pause_c = 83
+temperature_resume_c = 78
+max_epochs = 60
+# Two epochs between validations: at ~34 steps per epoch this validates every
+# ~68 steps, which is frequent enough to select a best checkpoint before the
+# ~200-step overfitting horizon without spending the night on validation passes.
+val_interval_epochs = 2.0
+early_stop_patience_epochs = 2.0

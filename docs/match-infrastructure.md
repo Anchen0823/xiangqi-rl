@@ -49,6 +49,39 @@ is absent; fake-engine tests cover parsing and the game loop everywhere.
 Archives per game: `game-NNNN.pgn` (UCCI-move PGN), `game-NNNN.ucci.log` (raw
 UCI traffic), plus `games.jsonl` and `summary.json` (Wilson lower bound).
 
+## Match correctness update (2026-09-30)
+
+- Consecutive games now use the same opening with reversed engine colors.
+  Previously colors alternated but each game used a different opening. Use an
+  even game count for a fully paired match; an odd count leaves one unpaired game.
+- A terminal referee result after the final allowed ply takes precedence over
+  the move-cap draw. Custom opening generation also loads the requested initial
+  FEN before generating any moves.
+- Candidate summaries require exactly one identifiable candidate per game and
+  reject unfinished results. The CLI assigns `-1` / `-2` suffixes when player
+  names coincide (including same-binary matches), and defaults the candidate to
+  the first player. Explicit `--candidate` values must match the resolved names.
+- Engine cleanup is managed by `ExitStack`, including a failure while starting
+  the second player. Invalid match budgets and candidate names fail before launch.
+- The existing `sprt_llr` calculation now uses log-space arithmetic to avoid
+  underflow in large samples. Its formula remains a fractional-score
+  approximation, identified by `sprt_method` in the summary; it is not a
+  normalized trinomial or paired-game SPRT and cannot alone certify promotion.
+
+Regression checks: `python -m unittest discover -s trainer/tests -p 'test_match*.py' -v`.
+Historical match reports have not been rewritten; new evaluations should rerun
+with the corrected opening schedule and terminal-result handling.
+
+Local verification on 2026-09-30: all 87 trainer tests passed, including 27 match
+tests and the real Pikafish determinism check. A separate two-game native
+baseline CLI smoke (depth 1, seed 42, opening 4 plies, cap 8 plies) produced
+matching opening FENs and reversed player identities in
+`reports/match-correctness-20260930/games.jsonl` (gitignored). This short capped
+run verifies infrastructure only, not playing strength. The full suite exposed
+an unclosed source-file warning in `split.py`; after adding a context manager,
+both split tests passed again with ResourceWarning reporting enabled and no
+resource warnings.
+
 ## Validation boundary
 
 - 51 trainer tests pass (including 14 new match tests); local real-engine

@@ -7,8 +7,9 @@ import math
 import os
 import random
 import time
+from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 import numpy as np
 import torch
@@ -204,6 +205,31 @@ def evaluate_records(
     return accumulator.summary()
 
 
+def transfer_feature_extractor(model: XiangqiNnue,
+                               source: Mapping[str, Tensor]) -> list[str]:
+    """Copy the width-independent parts of a checkpoint into a new architecture.
+
+    ``--init-checkpoint`` needs an identical architecture, which a widened model
+    is not. The feature transformer (a 1024-wide accumulator) and the PSQT heads
+    do not depend on the dense width, so those weights transfer unchanged and
+    keep what the previous network already learned about piece squares and
+    threats; the dense stacks stay freshly initialised. Keys absent from either
+    side are reported, not silently skipped.
+    """
+    target = model.state_dict()
+    shared = [
+        name for name in target
+        if not name.startswith("stacks.") and name in source
+        and target[name].shape == source[name].shape
+    ]
+    if not shared:
+        raise ValueError("source checkpoint shares no transferable parameter")
+    with torch.no_grad():
+        for name in shared:
+            target[name].copy_(source[name])
+    return shared
+
+
 def save_checkpoint(
     path: Path,
     model: XiangqiNnue,
@@ -213,14 +239,20 @@ def save_checkpoint(
     data_source: StreamingBatchSource | None = None,
     dataset_hash: str | None = None,
     best_val_huber: float | None = None,
+    best_val_epoch: float = 0.0,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".tmp")
     payload: dict[str, Any] = {
-        "model": model.state_dict(), "optimizer": optimizer.state_dict(), "step": step
+        "model": model.state_dict(), "optimizer": optimizer.state_dict(), "step": step,
+        # Recorded so a checkpoint can always be exported with the architecture it
+        # was trained with. Without it the exporter falls back to the default
+        # 32-wide network and silently misreads any larger model.
+        "model_config": asdict(model.config),
     }
     if best_val_huber is not None:
         payload["best_val_huber"] = best_val_huber
+        payload["best_val_epoch"] = best_val_epoch
     if data_source is not None:
         payload["data"] = data_source.state_dict()
         payload["dataset_manifest_sha256"] = dataset_hash
@@ -242,16 +274,25 @@ def main() -> None:
     parser.add_argument("--best-checkpoint", type=Path, default=Path("checkpoints/best.pt"))
     parser.add_argument("--metrics", type=Path, default=Path("checkpoints/metrics.jsonl"))
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--init-checkpoint", type=Path,
+                        help="initialize weights only for a new dataset; reset optimizer and cursor")
+    parser.add_argument("--transfer-features", type=Path,
+                        help="copy feature transformer and PSQT heads from a checkpoint whose "
+                             "dense width differs; the dense stacks start fresh")
     args = parser.parse_args()
     if args.synthetic_smoke == (args.dataset is not None):
         parser.error("choose exactly one of --dataset or --synthetic-smoke")
     if args.steps is not None and args.steps <= 0:
         parser.error("steps must be positive")
+    if args.resume and args.init_checkpoint:
+        parser.error("--resume and --init-checkpoint are mutually exclusive")
+    if args.resume and not args.checkpoint.is_file():
+        parser.error("--resume requires an existing checkpoint")
 
     config = TrainingConfig.from_toml(args.config)
     micro_batch = args.micro_batch or config.micro_batch_size
     accumulate = args.accumulate or config.accumulate
-    shuffle_buffer = args.shuffle_buffer or config.shuffle_buffer
+    shuffle_buffer = args.shuffle_buffer or max(micro_batch, config.batch_size)
     if micro_batch <= 0 or accumulate <= 0 or shuffle_buffer < micro_batch:
         parser.error("micro-batch, accumulate, and shuffle-buffer must be positive and consistent")
 
@@ -260,6 +301,14 @@ def main() -> None:
     random.seed(config.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = XiangqiNnue(config.model).to(device)
+    if args.init_checkpoint:
+        initial = torch.load(args.init_checkpoint, map_location="cpu", weights_only=False)
+        model.load_state_dict(initial["model"])
+        del initial
+    if args.transfer_features:
+        initial = torch.load(args.transfer_features, map_location="cpu", weights_only=False)
+        transfer_feature_extractor(model, initial["model"])
+        del initial
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.learning_rate,
                                   weight_decay=config.weight_decay)
     data_source = None
@@ -272,6 +321,7 @@ def main() -> None:
                                            seed=config.seed)
 
     start = 0
+    state = {}
     if args.resume and args.checkpoint.exists():
         state = torch.load(args.checkpoint, map_location=device, weights_only=False)
         model.load_state_dict(state["model"])
@@ -282,7 +332,7 @@ def main() -> None:
                 raise ValueError("checkpoint dataset manifest SHA-256 does not match")
             data_source.load_state_dict(state["data"])
 
-    steps_per_epoch = max(1, total_records // (micro_batch * accumulate)) if data_source else 1
+    steps_per_epoch = max(1, math.ceil(total_records / (micro_batch * accumulate))) if data_source else 1
     max_steps = args.steps if args.steps is not None else (
         config.max_epochs * steps_per_epoch if data_source else 1000
     )
@@ -291,17 +341,19 @@ def main() -> None:
         return
 
     checkpoint_at = time.monotonic() + config.checkpoint_seconds
+    args.metrics.parent.mkdir(parents=True, exist_ok=True)
     metrics_handle = args.metrics.open("a", encoding="utf-8") if args.val_dataset else None
     train_metrics = MetricAccumulator()
-    next_val_epoch = config.val_interval_epochs
-    best_val_huber = math.inf
-    best_val_epoch = 0.0
+    next_val_epoch = (math.floor(start / steps_per_epoch / config.val_interval_epochs) + 1) * config.val_interval_epochs
+    best_val_huber = state.get("best_val_huber", math.inf)
+    best_val_epoch = state.get("best_val_epoch", start / steps_per_epoch)
+    del state
     early_stopped = False
 
     def log_metrics(step: int, epoch: float, lr: float, *, val: dict[str, float] | None) -> None:
         line = {
             "step": step, "epoch": round(epoch, 3), "lr": lr,
-            "train": train_metrics.summary(), "val": val,
+            "train": train_metrics.summary() if train_metrics.count else None, "val": val,
             "best_val_huber": None if math.isinf(best_val_huber) else best_val_huber,
         }
         print(json.dumps(line), flush=True)
@@ -310,6 +362,13 @@ def main() -> None:
             metrics_handle.flush()
 
     try:
+        if args.val_dataset is not None and start == 0:
+            initial_val = evaluate_records(model, read_records(args.val_dataset), device, micro_batch)
+            best_val_huber = initial_val["huber"]
+            save_checkpoint(args.best_checkpoint, model, optimizer, -1,
+                            data_source=data_source, dataset_hash=dataset_hash,
+                            best_val_huber=best_val_huber)
+            log_metrics(-1, 0.0, 0.0, val=initial_val)
         for step in range(start, max_steps):
             wait_for_safe_temperature(config.temperature_pause_c, config.temperature_resume_c)
             lr = cosine_warmup_lr(step, config.warmup_steps, max_steps, config.learning_rate)
@@ -348,8 +407,8 @@ def main() -> None:
                     "data": "synthetic-smoke" if data_source is None else str(args.dataset),
                 }), flush=True)
             if data_source is not None:
-                epoch = step / steps_per_epoch
-                if epoch >= next_val_epoch:
+                epoch = (step + 1) / steps_per_epoch
+                if epoch >= next_val_epoch or step == max_steps - 1:
                     if args.val_dataset is not None:
                         val = evaluate_records(
                             model, read_records(args.val_dataset), device, micro_batch
@@ -359,7 +418,9 @@ def main() -> None:
                             best_val_epoch = epoch
                             save_checkpoint(
                                 args.best_checkpoint, model, optimizer, step,
+                                data_source=data_source, dataset_hash=dataset_hash,
                                 best_val_huber=best_val_huber,
+                                best_val_epoch=best_val_epoch,
                             )
                         if epoch - best_val_epoch >= config.early_stop_patience_epochs:
                             early_stopped = True
@@ -381,17 +442,15 @@ def main() -> None:
                     args.checkpoint, model, optimizer, step,
                     data_source=data_source, dataset_hash=dataset_hash,
                     best_val_huber=None if math.isinf(best_val_huber) else best_val_huber,
+                    best_val_epoch=best_val_epoch,
                 )
                 checkpoint_at = time.monotonic() + config.checkpoint_seconds
         save_checkpoint(
-            args.checkpoint, model, optimizer, max(start, max_steps - 1),
+            args.checkpoint, model, optimizer, step,
             data_source=data_source, dataset_hash=dataset_hash,
             best_val_huber=None if math.isinf(best_val_huber) else best_val_huber,
+            best_val_epoch=best_val_epoch,
         )
-        if data_source is not None and not early_stopped and args.val_dataset is not None:
-            epoch = max_steps / steps_per_epoch
-            val = evaluate_records(model, read_records(args.val_dataset), device, micro_batch)
-            log_metrics(max_steps - 1, epoch, lr, val=val)
     finally:
         if metrics_handle is not None:
             metrics_handle.close()

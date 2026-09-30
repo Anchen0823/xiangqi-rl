@@ -1,4 +1,6 @@
 import { parseFenBoard, squarePosition } from './board-model';
+import type { Side } from '../shared/protocol';
+import type { MoveFeedback } from './game-feedback';
 
 interface Props {
   fen: string;
@@ -7,10 +9,12 @@ interface Props {
   lastMove?: string;
   flipped: boolean;
   disabled: boolean;
+  feedback?: (MoveFeedback & { id: number }) | null;
+  checkedSide?: Side;
   onSquare: (square: string) => void;
 }
 
-export function Board({ fen, legalMoves, selected, lastMove, flipped, disabled, onSquare }: Props) {
+export function Board({ fen, legalMoves, selected, lastMove, flipped, disabled, feedback, checkedSide, onSquare }: Props) {
   const pieces = parseFenBoard(fen);
   const destinations = new Set(legalMoves.filter((move) => move.startsWith(selected ?? '--')).map((move) => move.slice(2)));
   const lastSquares = new Set(lastMove ? [lastMove.slice(0, 2), lastMove.slice(2)] : []);
@@ -47,8 +51,11 @@ export function Board({ fen, legalMoves, selected, lastMove, flipped, disabled, 
           })}
           <path d="M300 0 L500 200 M500 0 L300 200" />
           <path d="M300 700 L500 900 M500 700 L300 900" />
+          {[...[1, 7].flatMap((x) => [2, 7].map((y) => [x, y])), ...[0, 2, 4, 6, 8].flatMap((x) => [3, 6].map((y) => [x, y]))].map(([x, y]) => <g key={`mark-${x}-${y}`} strokeWidth="1.4">{[-1, 1].flatMap((dx) => [-1, 1].map((dy) => (x + dx >= 0 && x + dx <= 8) ? <path key={`${dx}-${dy}`} d={`M${x * 100 + dx * 20} ${y * 100 + dy * 7} H${x * 100 + dx * 7} V${y * 100 + dy * 20}`} /> : null))}</g>)}
         </g>
       </svg>
+      <div className="board-grain" aria-hidden="true" />
+      <div className="file-labels" aria-hidden="true">{(flipped ? ['1', '2', '3', '4', '5', '6', '7', '8', '9'] : ['九', '八', '七', '六', '五', '四', '三', '二', '一']).map((label) => <span key={label}>{label}</span>)}</div>
       <div className="river"><span>楚 河</span><span>漢 界</span></div>
       {Array.from({ length: 90 }, (_, index) => {
         const file = index % 9;
@@ -62,6 +69,7 @@ export function Board({ fen, legalMoves, selected, lastMove, flipped, disabled, 
             className={`square-hit ${destinations.has(square) ? 'destination' : ''} ${lastSquares.has(square) ? 'last' : ''}`}
             style={position}
             aria-label={square}
+            disabled={disabled}
             onClick={() => onSquare(square)}
           />
         );
@@ -70,12 +78,14 @@ export function Board({ fen, legalMoves, selected, lastMove, flipped, disabled, 
         <button
           type="button"
           key={piece.square}
-          className={`piece ${piece.side} ${selected === piece.square ? 'selected' : ''}`}
+          className={`piece ${piece.side} ${selected === piece.square ? 'selected' : ''} ${feedback?.square === piece.square ? 'just-landed' : ''} ${piece.code.toLowerCase() === 'k' && piece.side === checkedSide ? 'in-check' : ''}`}
           style={squarePosition(piece.square, flipped)}
           onClick={() => onSquare(piece.square)}
           aria-label={`${piece.side === 'red' ? '红' : '黑'}${piece.label} ${piece.square}`}
+          disabled={disabled}
         >{piece.label}</button>
       ))}
+      {feedback && <div key={feedback.id} className={`impact ${feedback.capture ? 'capture-impact' : ''}`} style={squarePosition(feedback.square, flipped)} aria-hidden="true"><i /><i /><i /></div>}
     </div>
   );
 }

@@ -12,6 +12,7 @@ from typing import BinaryIO, Iterable, Mapping
 import numpy as np
 import torch
 
+from .config import TrainingConfig
 from .model import NnueConfig
 
 try:
@@ -62,8 +63,8 @@ def _combine_hash(hashes: Iterable[int]) -> int:
     return result
 
 
-def feature_transformer_hash() -> int:
-    return _combine_hash((THREAT_FEATURE_HASH, PSQ_FEATURE_HASH)) ^ (1024 * 2)
+def feature_transformer_hash(config: NnueConfig = NnueConfig()) -> int:
+    return _combine_hash((THREAT_FEATURE_HASH, PSQ_FEATURE_HASH)) ^ (config.accumulator_size * 2)
 
 
 def affine_transform_hash(previous: int, output_dimensions: int) -> int:
@@ -77,21 +78,28 @@ def clipped_relu_hash(previous: int) -> int:
     return (0x538D24C7 + previous) & 0xFFFFFFFF
 
 
-def network_architecture_hash() -> int:
-    # ac_sqr_0 and ac_sqr_1 are deliberately absent, matching
-    # NetworkArchitecture::get_hash_value() in nnue_architecture.h.
+def network_architecture_hash(config: NnueConfig = NnueConfig()) -> int:
+    """Architecture hash over the trained dimensions.
+
+    ``get_hash_value()`` in nnue_architecture.h is a compile-time constant, so
+    the engine only accepts the default width. The hash is built from the
+    training config anyway: it keeps the written value an honest function of the
+    architecture, so a mismatched export fails loudly instead of producing a
+    file that Pikafish reads as garbage. ac_sqr_0 and ac_sqr_1 are deliberately
+    absent, matching NetworkArchitecture::get_hash_value().
+    """
     result = 0xEC42E90D
-    result ^= 1024 * 2
-    result = affine_transform_hash(result, 32)
+    result ^= config.accumulator_size * 2
+    result = affine_transform_hash(result, config.hidden1)
     result = clipped_relu_hash(result)
-    result = affine_transform_hash(result, 32)
+    result = affine_transform_hash(result, config.hidden2)
     result = clipped_relu_hash(result)
     result = affine_transform_hash(result, 1)
     return result
 
 
-def network_hash() -> int:
-    return feature_transformer_hash() ^ network_architecture_hash()
+def network_hash(config: NnueConfig = NnueConfig()) -> int:
+    return feature_transformer_hash(config) ^ network_architecture_hash(config)
 
 
 def write_leb128_signed(stream: BinaryIO, values: np.ndarray | Iterable[int]) -> int:
@@ -138,21 +146,23 @@ def _as_int32(tensor: torch.Tensor, scale: float) -> np.ndarray:
 
 @dataclass(frozen=True)
 class QuantizedLayerStack:
-    fc0_bias: np.ndarray  # int32[32]
-    fc0_weight: np.ndarray  # int8[32, 1024]
-    fc1_bias: np.ndarray  # int32[32]
-    fc1_weight: np.ndarray  # int8[32, 64]
+    fc0_bias: np.ndarray  # int32[hidden1]
+    fc0_weight: np.ndarray  # int8[hidden1, accumulator_size]
+    fc1_bias: np.ndarray  # int32[hidden2]
+    fc1_weight: np.ndarray  # int8[hidden2, hidden1 * 2]
     fc2_bias: np.ndarray  # int32[1]
-    fc2_weight: np.ndarray  # int8[1, 128]
+    fc2_weight: np.ndarray  # int8[1, hidden1 * 2 + hidden2 * 2]
 
-    def validate(self) -> None:
+    def validate(self, config: NnueConfig = NnueConfig()) -> None:
+        first = config.hidden1 * 2
+        second = config.hidden2 * 2
         expected = (
-            (self.fc0_bias, (32,), np.int32),
-            (self.fc0_weight, (32, 1024), np.int8),
-            (self.fc1_bias, (32,), np.int32),
-            (self.fc1_weight, (32, 64), np.int8),
+            (self.fc0_bias, (config.hidden1,), np.int32),
+            (self.fc0_weight, (config.hidden1, config.accumulator_size), np.int8),
+            (self.fc1_bias, (config.hidden2,), np.int32),
+            (self.fc1_weight, (config.hidden2, first), np.int8),
             (self.fc2_bias, (1,), np.int32),
-            (self.fc2_weight, (1, 128), np.int8),
+            (self.fc2_weight, (1, first + second), np.int8),
         )
         for index, (array, shape, dtype) in enumerate(expected):
             if array.shape != shape or array.dtype != dtype:
@@ -162,29 +172,32 @@ class QuantizedLayerStack:
 
 @dataclass(frozen=True)
 class QuantizedNetwork:
-    accumulator_bias: np.ndarray  # int16[1024]
-    psq_features: np.ndarray  # int8[16536, 1024]
-    threat_features: np.ndarray  # int8[45547, 1024]
-    psq_psqt: np.ndarray  # int32[16536, 16]
-    threat_psqt: np.ndarray  # int32[45547, 16]
+    accumulator_bias: np.ndarray  # int16[accumulator_size]
+    psq_features: np.ndarray  # int8[psq_feature_count, accumulator_size]
+    threat_features: np.ndarray  # int8[threat_feature_count, accumulator_size]
+    psq_psqt: np.ndarray  # int32[psq_feature_count, layer_stacks]
+    threat_psqt: np.ndarray  # int32[threat_feature_count, layer_stacks]
     stacks: tuple[QuantizedLayerStack, ...]
+    # Carried so validate() and the architecture hash describe the same network
+    # the weights came from, instead of assuming the default dimensions.
+    config: NnueConfig = NnueConfig()
 
     def validate(self) -> None:
         expected = (
-            (self.accumulator_bias, (1024,), np.int16),
-            (self.psq_features, (16_536, 1024), np.int8),
-            (self.threat_features, (45_547, 1024), np.int8),
-            (self.psq_psqt, (16_536, 16), np.int32),
-            (self.threat_psqt, (45_547, 16), np.int32),
+            (self.accumulator_bias, (self.config.accumulator_size,), np.int16),
+            (self.psq_features, (self.config.psq_feature_count, self.config.accumulator_size), np.int8),
+            (self.threat_features, (self.config.threat_feature_count, self.config.accumulator_size), np.int8),
+            (self.psq_psqt, (self.config.psq_feature_count, self.config.layer_stacks), np.int32),
+            (self.threat_psqt, (self.config.threat_feature_count, self.config.layer_stacks), np.int32),
         )
         for index, (array, shape, dtype) in enumerate(expected):
             if array.shape != shape or array.dtype != dtype:
                 raise ValueError(f"quantized network parameter {index} has shape/dtype "
                                  f"{array.shape}/{array.dtype}, expected {shape}/{dtype}")
-        if len(self.stacks) != 16:
-            raise ValueError(f"expected 16 layer stacks, got {len(self.stacks)}")
+        if len(self.stacks) != self.config.layer_stacks:
+            raise ValueError(f"expected {self.config.layer_stacks} layer stacks, got {len(self.stacks)}")
         for stack in self.stacks:
-            stack.validate()
+            stack.validate(self.config)
 
 
 def quantize_state_dict(
@@ -218,6 +231,7 @@ def quantize_state_dict(
         psq_psqt=_as_int32(tensor("psq_psqt.weight"), PSQT_SCALE),
         threat_psqt=_as_int32(tensor("threat_psqt.weight"), PSQT_SCALE),
         stacks=tuple(stacks),
+        config=config,
     )
     quantized.validate()
     return quantized
@@ -235,12 +249,12 @@ def uncompressed_chunks(
         raise ValueError("network description is too long")
 
     yield _u32(NETWORK_VERSION)
-    yield _u32(network_hash())
+    yield _u32(network_hash(network.config))
     yield _u32(len(encoded_description))
     yield encoded_description
 
     # FeatureTransformer block: hash header then parameters in read order.
-    yield _u32(feature_transformer_hash())
+    yield _u32(feature_transformer_hash(network.config))
     bias_buffer = io.BytesIO()
     write_leb128_signed(bias_buffer, network.accumulator_bias)
     yield bias_buffer.getvalue()
@@ -255,7 +269,7 @@ def uncompressed_chunks(
 
     # Sixteen NetworkArchitecture blocks. Each has one hash header and writes
     # fc0, fc1, fc2 sequentially; the activation layers carry no parameters.
-    architecture_hash = network_architecture_hash()
+    architecture_hash = network_architecture_hash(network.config)
     for stack in network.stacks:
         yield _u32(architecture_hash)
         yield stack.fc0_bias.astype("<i4", copy=False).tobytes()
@@ -308,15 +322,28 @@ def write_nnue(
         "sha256": sha256.hexdigest(),
         "description": description,
         "networkVersion": hex(NETWORK_VERSION),
-        "networkHash": hex(network_hash()),
+        "networkHash": hex(network_hash(quantized.config)),
     }
 
 
-def load_state_dict(path: Path) -> Mapping[str, torch.Tensor]:
+def load_checkpoint(path: Path) -> tuple[Mapping[str, torch.Tensor], NnueConfig | None]:
+    """Return the weights and, when the checkpoint records it, its architecture.
+
+    Checkpoints written before 2026-10-01 predate the ``model_config`` field; for
+    those the caller's config stands, which is the pre-existing behaviour.
+    """
     checkpoint = torch.load(path, map_location="cpu", weights_only=False)
-    if isinstance(checkpoint, dict) and "model" in checkpoint:
-        return checkpoint["model"]
-    return checkpoint
+    if not isinstance(checkpoint, dict) or "model" not in checkpoint:
+        return checkpoint, None
+    recorded = checkpoint.get("model_config")
+    if not isinstance(recorded, dict):
+        return checkpoint["model"], None
+    return checkpoint["model"], NnueConfig(**recorded)
+
+
+def load_state_dict(path: Path) -> Mapping[str, torch.Tensor]:
+    """Weights only, for callers that already know the architecture."""
+    return load_checkpoint(path)[0]
 
 
 def main() -> None:
@@ -325,13 +352,24 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--description", default="Xiangqi RL NNUE")
     parser.add_argument("--compression-level", type=int, default=3)
+    parser.add_argument(
+        "--config", type=Path, default=None,
+        help="training TOML used when the checkpoint does not record its architecture",
+    )
     args = parser.parse_args()
-    state = load_state_dict(args.checkpoint)
+    state, recorded = load_checkpoint(args.checkpoint)
+    if recorded is not None:
+        config = recorded
+    elif args.config is not None:
+        config = TrainingConfig.from_toml(args.config).model
+    else:
+        config = NnueConfig()
     report = write_nnue(
         args.output,
         state,
         description=args.description,
         compression_level=args.compression_level,
+        config=config,
     )
     print(json.dumps(report, indent=2, sort_keys=True))
 
