@@ -1,4 +1,5 @@
 import type { Analysis, PositionSnapshot, SavedGameV1, XiangqiBridge } from '../shared/protocol';
+import { positionError } from './position-editor';
 
 const INITIAL_FEN = 'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1';
 
@@ -21,8 +22,14 @@ export function installPreviewBridge(): void {
   if (window.xiangqi) return;
   let snapshot = initialSnapshot();
   const bridge: XiangqiBridge = {
-    async request<T>(method: string): Promise<T> {
+    async request<T>(method: string, params = {}): Promise<T> {
       if (method === 'newGame') snapshot = initialSnapshot();
+      if (method === 'loadFen') {
+        const fen = String((params as { fen?: string }).fen ?? '');
+        const error = positionError(fen);
+        if (error) throw new Error(error);
+        snapshot = { ...initialSnapshot(), fen, sideToMove: fen.split(' ')[1] === 'b' ? 'black' : 'red' };
+      }
       if (method === 'analyze') {
         return {
           depth: 12, nodes: 184_320, nps: 728_400, scoreCp: 18,

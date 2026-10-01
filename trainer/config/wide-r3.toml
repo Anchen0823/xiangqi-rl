@@ -1,0 +1,33 @@
+# Wider candidate for the 2026-10-01 night run.
+#
+# Pikafish's network reader fixes most of the architecture at compile time
+# (nnue_architecture.h): the accumulator is 1024 wide and LayerStacks is 16. Only
+# the two hidden layers are free, because the engine reads their width from the
+# file. This config therefore doubles hidden1/hidden2 and leaves the accumulator
+# and layer_stacks alone; changing those would make the engine read garbage.
+#
+# Layer stack parameter count goes from 16*(32*1024 + 32*64 + 1*128) to
+# 16*(64*1024 + 64*128 + 1*256), a 1.86x increase in trainable dense weights.
+[model]
+psq_feature_count = 16536
+threat_feature_count = 45547
+accumulator_size = 1024
+hidden1 = 64
+hidden2 = 64
+layer_stacks = 16
+
+[training]
+seed = 20261001
+batch_size = 8192
+micro_batch_size = 256
+learning_rate = 0.0004
+weight_decay = 0.00001
+warmup_steps = 80
+checkpoint_seconds = 120
+memory_soft_limit_gib = 6.5
+system_memory_limit_gib = 12.0
+temperature_pause_c = 83
+temperature_resume_c = 78
+max_epochs = 60
+val_interval_epochs = 2.0
+early_stop_patience_epochs = 2.0

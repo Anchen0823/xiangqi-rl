@@ -1,0 +1,18 @@
+# Warm-start the 20260930 continuation best checkpoint on the expanded
+# selfplay-v1 training set (139,496 records, 1,034 games).
+# 17 optimizer steps per epoch at batch 8192, at most 170 steps.
+[training]
+seed = 20260930
+batch_size = 8192
+micro_batch_size = 256
+learning_rate = 0.0004
+weight_decay = 0.00001
+warmup_steps = 10
+checkpoint_seconds = 120
+memory_soft_limit_gib = 6.5
+system_memory_limit_gib = 12.0
+temperature_pause_c = 83
+temperature_resume_c = 78
+max_epochs = 10
+val_interval_epochs = 0.5
+early_stop_patience_epochs = 2.0

@@ -9,6 +9,7 @@ import re
 import subprocess
 import threading
 import time
+from contextlib import ExitStack
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
@@ -307,6 +308,7 @@ def generate_openings(
     openings: list[Opening] = []
     for _ in range(count):
         rules.new_game()
+        rules.load_fen(initial_fen)
         moves: list[str] = []
         fen = initial_fen
         for _ in range(plies):
@@ -403,8 +405,9 @@ def play_game(
         except RulesProtocolError:
             return forfeit(side, f"illegal move: {search.move}")
         record.moves.append(search.move)
-    record.result = "draw"
-    record.reason = "max_plies"
+    result = rules.snapshot()["result"]
+    record.result = result["kind"] if result["kind"] != "ongoing" else "draw"
+    record.reason = result["reason"] if result["kind"] != "ongoing" else "max_plies"
     return record
 
 
@@ -436,11 +439,10 @@ def sprt_llr(
 ) -> float:
     """Sequential probability ratio test log-likelihood ratio.
 
-    Uses the standard trinomial model: under hypothesis h, a win has
-    likelihood h, a loss 1-h, and a draw sqrt(h*(1-h)) (draws modeled as the
-    geometric mean, as in fishtest-style SPRT). The caller stops and accepts
-    H1 when the cumulative LLR reaches ln((1-beta)/alpha), and accepts H0
-    when it reaches ln(beta/(1-alpha)).
+    Legacy fractional-score approximation: each draw contributes half a win
+    and half a loss. This is not a normalized trinomial or paired-game SPRT
+    and must not be used alone to certify a promotion. Compute in log space
+    so long matches do not underflow.
     """
     if not 0.0 < h0 < h1 < 1.0:
         raise ValueError("hypotheses must satisfy 0 < h0 < h1 < 1")
@@ -449,23 +451,20 @@ def sprt_llr(
     if wins < 0 or draws < 0 or losses < 0:
         raise ValueError("game counts cannot be negative")
 
-    def likelihood(h: float) -> float:
-        win = h ** wins
-        loss = (1.0 - h) ** losses
-        draw = (h * (1.0 - h)) ** (draws / 2.0)
-        return win * loss * draw
-
-    ll1 = likelihood(h1)
-    ll0 = likelihood(h0)
-    if ll0 <= 0.0 or ll1 <= 0.0:
-        return math.inf if ll1 > ll0 else -math.inf
-    return math.log(ll1 / ll0)
+    return (
+        (wins + draws / 2.0) * (math.log(h1) - math.log(h0))
+        + (losses + draws / 2.0) * (math.log1p(-h1) - math.log1p(-h0))
+    )
 
 
 def summarize_records(records: Sequence[GameRecord], candidate: str) -> dict[str, Any]:
     """Aggregate game records from the ``candidate`` engine's perspective."""
     wins = draws = losses = 0
     for record in records:
+        if (record.engine_red == candidate) == (record.engine_black == candidate):
+            raise ValueError("candidate must identify exactly one player in every game")
+        if record.result not in RESULT_TO_PGN:
+            raise ValueError(f"cannot summarize unfinished or unknown result: {record.result}")
         if record.result == "draw":
             draws += 1
         elif (record.result == "red_win") == (candidate == record.engine_red):
@@ -482,6 +481,7 @@ def summarize_records(records: Sequence[GameRecord], candidate: str) -> dict[str
         "score_rate": (wins + 0.5 * draws) / total if total else 0.0,
         "wilson_95_lower_bound": wilson_lower_bound(wins, draws, losses),
         "sprt_llr": sprt_llr(wins, draws, losses),
+        "sprt_method": "fractional-score-approximation",
         "sprt_h0": 0.50,
         "sprt_h1": 0.60,
     }
@@ -535,19 +535,26 @@ def run_match(
 ) -> dict[str, Any]:
     """Run ``games`` games with color reversal and archive everything to ``out_dir``.
 
-    Opening ``i`` uses seed-derived opening ``i % len(openings)``; engine sides
-    swap every game so each opening is played from both colors. Returns the
-    aggregated summary for the ``candidate`` engine.
+    Consecutive games share one seed-derived opening and reverse colors.
+    An odd game count leaves the final opening unpaired. Returns the aggregated
+    summary for the ``candidate`` engine.
     """
     if games <= 0:
         raise ValueError("games must be positive")
+    if nodes <= 0 or max_plies <= 0 or opening_plies < 0:
+        raise ValueError("nodes/max_plies must be positive and opening_plies non-negative")
+    if set(engines) != {"red", "black"}:
+        raise ValueError("engines must contain red and black players")
+    names = [engines[side].name for side in ("red", "black")]
+    if names.count(candidate) != 1 or names[0] == names[1]:
+        raise ValueError("players need distinct names and candidate must name one player")
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     with NativeRulesClient(rules_command) as rules:
-        openings = generate_openings(rules, seed=seed, count=games, plies=opening_plies)
+        openings = generate_openings(rules, seed=seed, count=(games + 1) // 2, plies=opening_plies)
         records: list[GameRecord] = []
         for index in range(games):
-            opening = openings[index % len(openings)]
+            opening = openings[index // 2]
             red, black = (engines["red"], engines["black"]) if index % 2 == 0 else (
                 engines["black"],
                 engines["red"],
@@ -616,6 +623,8 @@ def main() -> None:
     if len(eval_files) != 2:
         parser.error("provide zero, one, or two --eval-file values")
     names = list(args.engine_name) or []
+    if len(names) > 2:
+        parser.error("provide at most two --engine-name values")
     if len(names) == 1:
         names = [names[0], names[0]]
 
@@ -636,23 +645,36 @@ def main() -> None:
         else:
             parser.error("no players provided")
 
-    engines: dict[str, UciEngine | NativeEnginePlayer] = {}
-    for index, (kind, path) in enumerate(specs):
-        display = names[index] if index < len(names) and names[index] else path.stem
-        side = ("red", "black")[index]
-        if kind == "baseline":
-            engines[side] = NativeEnginePlayer(
-                path, name=display, difficulty="baseline",
-                depth=args.baseline_depth, timeout=args.timeout,
-            )
-        else:
-            engines[side] = UciEngine(
-                path, name=display, eval_file=eval_files[index],
-                threads=args.threads, hash_mb=args.hash_mb, timeout=args.timeout,
-                variant="xiangqi" if kind == "teacher" else None,
-                coordinate_flip=kind == "teacher",
-            )
-    try:
+    names = [names[i] if i < len(names) and names[i] else path.stem
+             for i, (_, path) in enumerate(specs)]
+    if names[0] == names[1]:
+        names = [f"{names[0]}-1", f"{names[1]}-2"]
+    if args.candidate and args.candidate not in names:
+        parser.error(f"--candidate must be one of: {', '.join(names)}")
+    if args.games <= 0 or args.nodes <= 0 or args.max_plies <= 0 or args.opening_plies < 0:
+        parser.error("games/nodes/max-plies must be positive and opening-plies non-negative")
+
+    # Register each player immediately, so a failed second launch also closes
+    # the first process. ExitStack still closes other players if one close fails.
+    with ExitStack() as stack:
+        engines: dict[str, UciEngine | NativeEnginePlayer] = {}
+        for index, (kind, path) in enumerate(specs):
+            side = ("red", "black")[index]
+            if kind == "baseline":
+                engine = NativeEnginePlayer(
+                    path, name=names[index], difficulty="baseline",
+                    depth=args.baseline_depth, timeout=args.timeout,
+                )
+            else:
+                engine = UciEngine(
+                    path, name=names[index], eval_file=eval_files[index],
+                    threads=args.threads, hash_mb=args.hash_mb, timeout=args.timeout,
+                    variant="xiangqi" if kind == "teacher" else None,
+                    coordinate_flip=kind == "teacher",
+                )
+            stack.callback(engine.close)
+            engines[side] = engine
+        default_candidate = engines["red"].name if "red" in engines else ""
         summary = run_match(
             rules_command=args.rules_engine,
             engines=engines,
@@ -662,11 +684,8 @@ def main() -> None:
             nodes=args.nodes,
             max_plies=args.max_plies,
             out_dir=args.out_dir,
-            candidate=args.candidate or names[0],
+            candidate=args.candidate or default_candidate,
         )
-    finally:
-        for engine in engines.values():
-            engine.close()
     print(json.dumps(summary, indent=2, sort_keys=True))
 
 

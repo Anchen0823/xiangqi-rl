@@ -1,0 +1,17 @@
+# Warm-start candidate-101 on the game-separated trial training partition.
+# 26 optimizer steps per epoch, at most 130 steps, validation every half epoch.
+[training]
+seed = 823
+batch_size = 2048
+micro_batch_size = 256
+learning_rate = 0.0002
+weight_decay = 0.00001
+warmup_steps = 10
+checkpoint_seconds = 120
+memory_soft_limit_gib = 6.5
+system_memory_limit_gib = 12.0
+temperature_pause_c = 83
+temperature_resume_c = 78
+max_epochs = 5
+val_interval_epochs = 0.5
+early_stop_patience_epochs = 2.0

@@ -155,6 +155,60 @@ void testBaselineSearch() {
            "baseline prefers capturing a free cannon at depth 3");
 }
 
+void testDifficultyBudgets() {
+    const auto beginner = xiangqi::difficultyLimits("beginner");
+    const auto casual = xiangqi::difficultyLimits("casual");
+    const auto advanced = xiangqi::difficultyLimits("advanced");
+    const auto club = xiangqi::difficultyLimits("club");
+    const auto expert = xiangqi::difficultyLimits("expert");
+
+    // A stronger level must never search less than a weaker one.
+    expect(beginner.nodes > 0 && beginner.nodes < casual.nodes, "beginner searches less than casual");
+    expect(casual.nodes < advanced.nodes, "casual searches less than advanced");
+    expect(advanced.nodes < club.nodes, "advanced searches less than club");
+    expect(club.nodes < expert.nodes, "club searches less than expert");
+    expect(beginner.millis < casual.millis && casual.millis < advanced.millis
+               && advanced.millis < expert.millis,
+           "time budgets rise with difficulty");
+    // The depth cap is a runaway guard and must stay ordered too.
+    expect(beginner.maxDepth <= club.maxDepth && club.maxDepth <= expert.maxDepth,
+           "depth caps are non-decreasing");
+    // Unknown or missing difficulty must still yield a usable budget.
+    const auto fallback = xiangqi::difficultyLimits("does-not-exist");
+    expect(fallback.nodes > 0 && fallback.millis > 0 && fallback.maxDepth > 0,
+           "unknown difficulty falls back to a bounded club-like budget");
+    expect(xiangqi::difficultyLimits("").nodes == fallback.nodes,
+           "empty difficulty uses the same fallback budget");
+}
+
+void testGoCommandUsesBudgetsNotFixedDepth() {
+    // The emitted command, not the table, is what decides the search.
+    const auto beginner = xiangqi::difficultyLimits("beginner");
+    const auto command = xiangqi::goCommand(beginner);
+    expect(command.rfind("go nodes", 0) == 0, "go command starts with a node budget");
+    expect(command.find("movetime") != std::string::npos, "go command carries the clock budget");
+    // A duplicated depth token would make the engine honour an arbitrary cap.
+    expect(command.find("depth") == std::string::npos,
+           "a budgeted search must not also send a depth limit");
+    size_t nodes = command.find("nodes");
+    expect(nodes != std::string::npos && command.find("nodes", nodes + 1) == std::string::npos,
+           "the node limit appears exactly once");
+    expect(command.find("movetime") == command.rfind("movetime"),
+           "the clock limit appears exactly once");
+
+    // The depth cap is a runaway guard, so it must sit above the reachable
+    // depth. Otherwise the level silently degrades to a fixed ply count.
+    expect(beginner.maxDepth >= 12, "beginner depth guard is above its reachable depth");
+    expect(xiangqi::difficultyLimits("casual").maxDepth >= 16,
+           "casual depth guard is above its reachable depth");
+    expect(xiangqi::difficultyLimits("club").maxDepth >= 26,
+           "club depth guard is above its reachable depth");
+
+    // With no budget at all, the search must still run by depth.
+    expect(xiangqi::goCommand({}) == "go depth 64", "an empty budget falls back to depth");
+    expect(xiangqi::goCommand({0, 0, 12}) == "go depth 12", "depth-only budget is honoured");
+}
+
 } // namespace
 
 int main() {
@@ -168,6 +222,8 @@ int main() {
     testRepetitionResponsibilityPriority();
     testUciInfoParsing();
     testBaselineSearch();
+    testDifficultyBudgets();
+    testGoCommandUsesBudgetsNotFixedDepth();
     if (failures) {
         std::cerr << failures << " test(s) failed\n";
         return EXIT_FAILURE;
