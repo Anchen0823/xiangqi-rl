@@ -23,16 +23,21 @@ export function Board({ fen, legalMoves, selected, lastMove, flipped, disabled, 
       <svg className="board-grid" viewBox="0 0 800 900" preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id="board-wood" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#c98b4d" />
-            <stop offset="0.52" stopColor="#bd7e43" />
-            <stop offset="1" stopColor="#a96838" />
+            <stop offset="0" stopColor="#f1d4a0" />
+            <stop offset="0.52" stopColor="#e7c18b" />
+            <stop offset="1" stopColor="#d6a76d" />
           </linearGradient>
           <linearGradient id="river-wood" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#c98b4f" />
-            <stop offset="1" stopColor="#b9763e" />
+            <stop offset="0" stopColor="#e9c795" />
+            <stop offset="1" stopColor="#e8c28d" />
           </linearGradient>
+          <filter id="wood-grain" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency=".035 .004" numOctaves="2" seed="12" />
+            <feColorMatrix type="saturate" values="0" />
+          </filter>
         </defs>
         <rect className="board-surface" width="800" height="900" />
+        <rect className="wood-texture" width="800" height="900" filter="url(#wood-grain)" opacity=".09" />
         <rect className="river-surface" y="400" width="800" height="100" />
         <g className="board-lines">
           {Array.from({ length: 10 }, (_, rank) => (
@@ -69,7 +74,7 @@ export function Board({ fen, legalMoves, selected, lastMove, flipped, disabled, 
             className={`square-hit ${destinations.has(square) ? 'destination' : ''} ${lastSquares.has(square) ? 'last' : ''}`}
             style={position}
             aria-label={square}
-            disabled={disabled}
+            disabled={disabled || pieces.some((piece) => piece.square === square)}
             onClick={() => onSquare(square)}
           />
         );
