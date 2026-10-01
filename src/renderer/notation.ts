@@ -1,4 +1,5 @@
 import { parseFenBoard, type BoardPiece } from './board-model';
+import type { Analysis, PositionSnapshot } from '../shared/protocol';
 
 const chinese = '〇一二三四五六七八九';
 
@@ -70,4 +71,13 @@ export function chineseMove(initialFen: string, history: string[], move: string)
 
 export function chineseMoves(initialFen: string, moves: string[]): string[] {
   return moves.map((move, index) => chineseMove(initialFen, moves.slice(0, index), move));
+}
+
+/** A recommendation is interpreted only in the exact position the engine searched. */
+export function recommendedMove(snapshot: PositionSnapshot | null, analysisFen: string, analysis: Analysis | null): string | undefined {
+  const move = analysis?.pv[0];
+  if (!snapshot || analysisFen !== snapshot.fen || !move || !snapshot.legalMoves.includes(move)) return undefined;
+  // snapshot.fen already includes the entire history; replaying it again can
+  // overwrite a different piece now occupying one of the old origin squares.
+  return chineseMove(snapshot.fen, [], move);
 }

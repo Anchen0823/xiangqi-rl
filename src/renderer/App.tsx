@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Analysis, Difficulty, PositionSnapshot, SavedGameV1, Side } from '../shared/protocol';
 import { Board } from './Board';
 import { parseFenBoard } from './board-model';
-import { chineseMove, chineseMoves } from './notation';
+import { recommendedMove, chineseMoves } from './notation';
 import { GameAudio } from './game-audio';
 import { cueTitles, moveFeedback, type Cue, type MoveFeedback } from './game-feedback';
 import { PositionEditor, type EditorDraft } from './PositionEditor';
@@ -148,7 +148,7 @@ export function App() {
       void request.finally(() => { if (moveInFlight.current === request) moveInFlight.current = null; });
     }, 300);
     return () => { canceled = true; window.clearTimeout(timer); playedForFen.current = null; };
-  }, [snapshot, analysis, mode, humanSide, difficulty, run, commitMove, !!editor]);
+  }, [snapshot, analysis, analysisFen, mode, humanSide, difficulty, run, commitMove, !!editor]);
 
   const pending = useMemo(
     () => Boolean(!editor && snapshot && snapshot.result.kind === 'ongoing' && mode === 'ai' && snapshot.sideToMove !== humanSide),
@@ -156,10 +156,8 @@ export function App() {
   );
   // The shown score belongs to the current position only; anything else is a
   // guess in flight, and while the AI thinks its search is the panel's answer.
-  const shownAnalysis = pending || (snapshot && analysisFen === snapshot.fen) ? analysis : null;
-  const recommended = snapshot && shownAnalysis?.pv[0]
-    ? chineseMove(snapshot.fen, snapshot.history.map((entry) => entry.move), shownAnalysis.pv[0])
-    : undefined;
+  const shownAnalysis = !editor && snapshot && analysisFen === snapshot.fen ? analysis : null;
+  const recommended = recommendedMove(snapshot, analysisFen, shownAnalysis);
 
   const piecesBySquare = useMemo(() => {
     const entries = snapshot ? parseFenBoard(snapshot.fen).map((piece) => [piece.square, piece] as const) : [];
