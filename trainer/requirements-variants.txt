@@ -1,0 +1,4 @@
+# Separate from the standard NNUE runtime.
+onnx==1.23.1
+onnxscript==0.7.2
+onnxruntime==1.30.0

@@ -4,6 +4,8 @@ project(xiangqi_native LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# The portable desktop package must run without a separately installed MSVC runtime.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_library(xiangqi_rules src/position.cpp src/search.cpp src/baseline.cpp)
 target_include_directories(xiangqi_rules PUBLIC include)

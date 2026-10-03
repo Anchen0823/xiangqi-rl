@@ -14,6 +14,24 @@
 
 ## 目录
 
+桌面免安装包：`npm.cmd run desktop:package`，输出到 `dist/desktop/`。
+完整文件夹内双击 `弈境.exe`，四种模式自动加载各自的已训练模型；未训练或规则不匹配时保留模型空位。
+具体模型来源和使用方式见 [桌面应用说明](docs/desktop-app.md)。
+
+[项目文件结构](docs/project-structure.md) · [揭棋独立训练](docs/jieqi-training.md)
+
+双击 `训练揭棋.cmd` 启动约 30 分钟揭棋试训；新数据、独立权重和换色评测统一存入
+`runs/jieqi/<run-id>/`。模型以旧揭棋候选为起点，不加载普通象棋 NNUE。
+工具实现已集中到 `scripts/variants/`，原命令仍保留兼容入口。
+揭棋整夜训练双击 `训练揭棋8小时.cmd`；[8 小时训练说明](docs/jieqi-night-8hours.md)包含恢复、预算与输出位置。
+
+新增四个平级玩法入口：**普通象棋 / 变体实验室 / 揭棋 / 翻棋**。双击根目录
+`变体实验室.cmd` 可打开本地网页，自定义棋子、揭棋和翻棋均可实际对弈；桌面界面也有同级入口。
+新增模式复用独立 TypeScript 裁判、观测隔离搜索和策略价值模型，保留原普通象棋入口、
+`.xqgame`、NNUE 及夜间训练流程。规则、完整摆法和操作见
+[玩法说明](docs/variant-laboratory.md)，训练、恢复和固定预算报告见
+[训练与评测](docs/variant-training.md)，实际执行证据见 [验收记录](docs/variant-validation-2026-10-02.md)。
+
 - `native/`：C++20 规则、搜索进程与测试。
 - `src/`：Electron 主进程、IPC 预加载桥和 React 界面。
 - `trainer/`：NNUE 模型、CUDA/PyTorch 诊断与训练入口。

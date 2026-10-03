@@ -7,8 +7,17 @@
   "type": "module",
   "main": "dist-electron/main/index.cjs",
   "scripts": {
+    "desktop:models": "node scripts/desktop/prepare-models.mjs",
+    "desktop:package": "npm run desktop:models && npm run build && node scripts/desktop/package.mjs",
+    "lab:engine": "node scripts/variants/build-lab.mjs",
+    "lab:build": "npm run lab:engine && tsc -b && vite build",
+    "lab:serve": "node scripts/variants/serve-lab.mjs --open",
+    "lab:test": "vitest run src/renderer/variants.test.ts src/renderer/experiment.test.ts",
+    "lab:train": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/variants/train-variants.ps1",
+    "jieqi:train": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/variants/train-jieqi.ps1",
+    "lab:experiment": "node build/variants/cli.mjs batch",
     "dev": "concurrently -k \"vite --host 127.0.0.1\" \"tsc -p tsconfig.electron.json --watch --preserveWatchOutput\" \"wait-on http://127.0.0.1:5173 file:dist-electron/main/index.cjs && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
-    "build": "npm run native:build && tsc -b && vite build && tsc -p tsconfig.electron.json",
+    "build": "npm run native:build && npm run lab:engine && tsc -b && vite build && tsc -p tsconfig.electron.json",
     "typecheck": "tsc -b --pretty false && tsc -p tsconfig.electron.json --pretty false",
     "test": "vitest run && npm run native:test",
     "test:ui": "vitest",
@@ -19,9 +28,11 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
+    "onnxruntime-node": "1.24.3",
+    "onnxruntime-web": "1.24.3",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
@@ -30,8 +41,9 @@
     "concurrently": "latest",
     "cross-env": "latest",
     "electron": "latest",
+    "esbuild": "0.28.2",
     "typescript": "latest",
-    "wait-on": "latest",
-    "vitest": "latest"
+    "vitest": "latest",
+    "wait-on": "latest"
   }
 }

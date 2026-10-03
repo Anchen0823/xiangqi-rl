@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "models": [
+    {"mode":"standard","name":"普通象棋 · 09-30 续训候选","kind":"nnue","source":"checkpoints/expanded-20260930/candidate.nnue","engine":"native/bin/pikafish.exe","note":"已训练候选，未认证业余棋力"},
+    {"mode":"jieqi","name":"揭棋 · 10-03 独立训练候选","kind":"onnx","source":"runs/jieqi/pilot-20261003/model/candidate.onnx","note":"182 局训练，1000 次更新；独立评测已完成"},
+    {"mode":"custom","name":"自定义棋子 · 短训实验候选","kind":"onnx","source":"runs/variants/acceptance-20261002/custom/model/candidate.onnx","note":"仅 8 局、100 次更新的流水线候选；仅限匹配规则"},
+    {"mode":"banqi","name":"翻棋 · 短训实验候选","kind":"onnx","source":"runs/variants/acceptance-20261002/banqi/model/candidate.onnx","note":"仅 8 局、100 次更新的流水线候选，尚无棋力结论"}
+  ]
+}

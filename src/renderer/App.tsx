@@ -27,6 +27,8 @@ const resultLabels: Record<string, string> = {
 };
 
 export function App() {
+  const [desktopModel,setDesktopModel]=useState('基础搜索');
+  useEffect(()=>{void window.desktopModels?.list().then(models=>{const model=models.find(m=>m.mode==='standard');setDesktopModel(model?.status==='available'?model.name:model?.note??'模型空位 · 基础搜索');}).catch(()=>setDesktopModel('模型状态不可用'));},[]);
   const [snapshot, setSnapshot] = useState<PositionSnapshot | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [flipped, setFlipped] = useState(false);
@@ -315,6 +317,7 @@ export function App() {
 
       <section className="workspace">
         <aside className="left-panel panel">
+          <p className="desktop-model-status" data-testid="standard-model">当前 AI：{desktopModel}</p>
           {editor ? <PositionEditor draft={editor} busy={editorBusy} onChange={(draft) => { setEditor(draft); setError(null); }} onApply={() => void applyPosition()} onCancel={cancelEditing} /> : <>
           <h2>对局设置</h2>
           <label>模式<select value={mode} onChange={(event) => setMode(event.target.value as 'ai' | 'local')}><option value="ai">人机对弈</option><option value="local">本地双人</option></select></label>

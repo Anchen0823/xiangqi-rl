@@ -1,0 +1,9 @@
+.standard-lab-link{display:flex;justify-content:center;gap:30px;position:relative;top:auto;right:auto;width:100%;height:44px;border-radius:0;border:0;border-bottom:1px solid #d9dfd0;background:#f7f8f0;color:#48604e;align-items:center;padding:0;font-size:12px}
+.standard-lab-link a[aria-current]{font-weight:bold;color:#245c49;border-bottom:2px solid #245c49;height:100%;display:grid;place-items:center}
+.standard-app-root .app-shell{height:calc(100vh - 44px)}
+.lab-lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.lab-board:not(.banqi) .lab-square:before{display:none}
+.lab-stone.hidden.red{border-color:#a04c34;box-shadow:0 3px 2px #35402740,inset 0 0 0 2px #a66c4c,inset 0 0 0 3px #d5d9b250}
+.lab-stone.hidden.black{border-color:#20392c}
+.lab-square:not(:hover) small{opacity:.2}
+@media(max-width:730px){.lab-header{gap:15px;flex-wrap:wrap;height:auto;padding-top:13px}.lab-header .lab-brand{margin-bottom:4px}.lab-header nav{width:100%;height:40px;gap:0;justify-content:space-between}.lab-header nav a{font-size:12px;padding:0 3px}.lab-brand small{font-size:7px}.standard-lab-link{gap:22px;font-size:11px}}

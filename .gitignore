@@ -158,6 +158,7 @@ datasets/
 checkpoints/
 runs/
 reports/
+release/
 models/*.pt
 models/*.ckpt
 models/*.nnue

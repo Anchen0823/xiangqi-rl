@@ -7,3 +7,7 @@ const bridge: XiangqiBridge = {
   openGame: () => ipcRenderer.invoke('file:openGame'),
 };
 contextBridge.exposeInMainWorld('xiangqi', bridge);
+contextBridge.exposeInMainWorld('desktopModels', {
+  list: () => ipcRenderer.invoke('models:list'),
+  load: (mode: string, rulesHash: string) => ipcRenderer.invoke('models:load', mode, rulesHash),
+});
