@@ -21,6 +21,10 @@ def run_campaign(args, runner=run, clock=time.time):
     root = args.out.resolve(); root.mkdir(parents=True, exist_ok=True)
     file = root / 'night.json'
     settings = {key: getattr(args, key) for key in ['hours', 'round_minutes', 'nodes', 'steps', 'pairs', 'device']}
+    seed_round_start = getattr(args, 'seed_round_start', 0)
+    round_seed(seed_round_start)
+    if seed_round_start:
+        settings['seed_round_start'] = seed_round_start
     if file.exists():
         state = json.loads(file.read_text(encoding='utf-8'))
         if state['settings'] != settings:
@@ -50,7 +54,7 @@ def run_campaign(args, runner=run, clock=time.time):
                 break
             options = SimpleNamespace(out=out, initial=Path(state['latestModel']),
                 minutes=args.round_minutes, nodes=args.nodes, steps=args.steps, pairs=args.pairs,
-                device=args.device, seed_offset=round_seed(index), deadline_override=state['deadline'])
+                device=args.device, seed_offset=round_seed(seed_round_start + index), deadline_override=state['deadline'])
             state.update(phase='running', currentRound=index, currentOutput=str(out))
             atomic_json(file, state)
             print(f'Jieqi round {index + 1}; remaining {(state["deadline"]-clock())/60:.1f} minutes', flush=True)
@@ -92,6 +96,8 @@ def main():
     parser.add_argument('--steps', type=int, default=2000)
     parser.add_argument('--pairs', type=int, default=8)
     parser.add_argument('--device', choices=['cpu', 'cuda', 'auto'], default='cpu')
+    parser.add_argument('--seed-round-start', type=int, default=0,
+                        help='Global round offset; use a fresh range for a new campaign')
     args = parser.parse_args()
     if min(args.hours, args.round_minutes, args.nodes, args.steps, args.pairs) <= 0:
         parser.error('All budgets must be positive')

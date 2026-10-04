@@ -68,5 +68,18 @@ class JieqiNightTests(unittest.TestCase):
         self.assertTrue(all(a[1]<b[0] for a,b in zip(ranges,ranges[1:])))
         with self.assertRaises(ValueError): round_seed(200)
 
+    def test_next_campaign_uses_fresh_domain_and_checks_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args=self.options(Path(tmp)); args.seed_round_start=13; seen=[]
+            def interrupted(options):
+                seen.append(options.seed_offset)
+                raise KeyboardInterrupt()
+            with self.assertRaises(KeyboardInterrupt):
+                run_campaign(args, runner=interrupted, clock=lambda:100)
+            self.assertEqual(seen, [140000000])
+            args.seed_round_start=0
+            with self.assertRaisesRegex(ValueError, 'configuration mismatch'):
+                run_campaign(args, runner=interrupted, clock=lambda:100)
+
 
 if __name__=='__main__': unittest.main()

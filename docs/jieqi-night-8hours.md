@@ -25,7 +25,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/variants/train-jieqi
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/variants/train-jieqi-8hours.ps1 `
-  -Output runs/jieqi/night-next -Initial runs/jieqi/night-8h/round-000/model
+  -Output runs/jieqi/night-second -Initial runs/jieqi/night-8h/round-012/model -SeedRoundStart 13
 ```
 
 `night.json` 保存截止时间、当前轮次、已完成轮次及最新可用模型；
@@ -34,6 +34,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/variants/train-jieqi
 未完成的最后一轮保留在原编号目录；`latestModel` 始终指向完整结束的一轮或原始候选。
 
 启动前需要已有项目训练依赖、Node.js 和初始 PT／ONNX／JSON。桌面免安装包只负责对弈，训练在源码项目运行。
+
+上例对应第一夜已完成 13 轮的实际产物。其他批次应按累计全局轮次设置 `-SeedRoundStart`，
+避免仅换输出目录却重复种子。第一夜结果见 [2026-10-04 审计与独立复测](jieqi-night-review-2026-10-04.md)。
 
 ## 入口验收
 

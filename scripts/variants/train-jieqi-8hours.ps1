@@ -6,6 +6,7 @@ param(
   [int]$Nodes=128,
   [int]$Steps=2000,
   [int]$Pairs=8,
+  [int]$SeedRoundStart=0,
   [ValidateSet('cpu','cuda','auto')][string]$Device='cpu'
 )
 $ErrorActionPreference='Stop'
@@ -19,6 +20,6 @@ $env:PYTHONIOENCODING='utf-8'
 $logPath=Join-Path $Output ('logs/session-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
 Start-Transcript -LiteralPath $logPath
 try {
-  & ./.venv/Scripts/python.exe -u -m xiangqi_variants.jieqi_night --hours $Hours --out $Output --initial $Initial --round-minutes $RoundMinutes --nodes $Nodes --steps $Steps --pairs $Pairs --device $Device
+  & ./.venv/Scripts/python.exe -u -m xiangqi_variants.jieqi_night --hours $Hours --out $Output --initial $Initial --round-minutes $RoundMinutes --nodes $Nodes --steps $Steps --pairs $Pairs --device $Device --seed-round-start $SeedRoundStart
   if ($LASTEXITCODE -ne 0) { throw "Jieqi campaign failed; see $Output/night.json and $logPath" }
 } finally { Stop-Transcript }

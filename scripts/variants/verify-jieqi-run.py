@@ -55,7 +55,9 @@ def main():
                 records = []
                 for file in sorted(out.glob('game-*.json')):
                     record = json.loads(file.read_text(encoding='utf-8')); records.append(record)
-                    assert seed_for(name, record['group']) not in seeds
+                    expected_seed = seed_for(name, record['group']) + config.get('seedOffset', 0)
+                    assert expected_seed not in seeds
+                    assert summary['config']['seed'] + record['group'] == expected_seed
                     assert all(s['nodes'] == config['nodes'] for s in record['searches'])
                     assert len(record['actions']) == len(record['searches']) == len(record['searchSeeds'])
                     for index, search in enumerate(record['searches']):
